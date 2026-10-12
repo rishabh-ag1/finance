@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Blocks commits that change finance-critical code without touching finance/docs/.
+# Enable once per clone:  git config core.hooksPath .githooks
+# Bypass for a genuine no-behaviour-change commit:  SKIP_SPEC_CHECK=1 git commit ...
+set -euo pipefail
+[ "${SKIP_SPEC_CHECK:-0}" = "1" ] && exit 0
+
+staged=$(git diff --cached --name-only --diff-filter=ACMRD)
+# Paths whose changes almost always alter documented behaviour. Adjust as the code layout settles.
+critical='^finance/(backend/prisma/|backend/src/.*(invoice|proforma|credit-?note|numbering|series|tax|gst|tds|ledger|bank|import|categor|reconcil|settlement|remittance|payment|receipt|vendor|loan|period-?lock|template|audit|money))'
+
+crit=$(echo "$staged" | grep -Ei "$critical" || true)
+docs=$(echo "$staged" | grep -E '^finance/docs/(spec|rules|changelog)\.md$' || true)
+
+if [ -n "$crit" ] && [ -z "$docs" ]; then
+  echo "Spec check: these finance-critical files changed but finance/docs/ did not:"
+  echo "$crit" | sed 's/^/  - /'
+  echo
+  echo "Update finance/docs/spec.md or rules.md and add a line to finance/docs/changelog.md in the same commit."
+  echo "If behaviour truly did not change, re-run with SKIP_SPEC_CHECK=1 and say why in the message."
+  exit 1
+fi
+if [ -n "$docs" ] && ! echo "$docs" | grep -q 'finance/docs/changelog.md'; then
+  echo "Spec check: docs changed but finance/docs/changelog.md has no new line. Add one."
+  exit 1
+fi

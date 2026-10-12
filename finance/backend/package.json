@@ -1,0 +1,46 @@
+{
+  "name": "finance-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Entelechy Finance API (Express 5 + Prisma, Postgres schema \"finance\")",
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "db:sync": "prisma db push && prisma db execute --file prisma/sql/finance.sql --schema prisma/schema.prisma",
+    "db:seed": "prisma db seed",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.6.0",
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "date-fns": "^4.4.0",
+    "dotenv": "^17.2.4",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.2.1",
+    "@types/supertest": "^6.0.3",
+    "nodemon": "^3.1.11",
+    "prisma": "^6.6.0",
+    "supertest": "^7.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

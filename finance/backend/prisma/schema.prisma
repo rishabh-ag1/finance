@@ -1,0 +1,88 @@
+// Entelechy Finance - Prisma schema.
+// Same conventions as Bloc's crm/backend/prisma/schema.prisma: multiSchema, cuid string ids,
+// PascalCase models with camelCase columns, schema changes via `prisma db push` (no migrations dir).
+// Every model lives in the Postgres schema "finance". Finance never writes to the CRM's schemas.
+// What Prisma cannot express (audit triggers, no-hard-delete triggers, check constraints) is in
+// prisma/sql/finance.sql, applied by `npm run db:sync` right after the push.
+// Every model must have a single `id` column: the audit trigger keys AuditLog rows on it.
+
+generator client {
+  provider        = "prisma-client-js"
+  engineType      = "binary"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["finance"]
+}
+
+// ---------- Users, roles & audit (M16) ----------
+// Same shape as Bloc's User / Role so the founders can move to the CRM's single login when the
+// apps are merged. Permissions use finance-prefixed module keys (financeBank, financeVendors...).
+
+model User {
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  passwordHash        String?
+  firstName           String
+  lastName            String
+  roleId              String?
+  isActive            Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime? @db.Timestamptz(6)
+  lastLoginAt         DateTime? @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  role                Role?     @relation(fields: [roleId], references: [id])
+
+  @@schema("finance")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  /// e.g. {"financeBank":{"view":true,"edit":true},"financeAudit":{"view":true}}
+  permissions Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  users       User[]
+
+  @@schema("finance")
+}
+
+enum AuditAction {
+  create
+  update
+  archive
+  cancel
+  unlock
+  delete_refused
+  other
+
+  @@schema("finance")
+}
+
+/// BR-43. Written by the database trigger finance.audit_row() on every insert/update of every
+/// finance table, inside the same transaction, so no change can skip it. Append only.
+model AuditLog {
+  id         BigInt      @id @default(autoincrement())
+  recordType String
+  recordId   String
+  action     AuditAction
+  field      String?
+  oldValue   Json?
+  newValue   Json?
+  reason     String?
+  /// User.id of the person, or "system" for seed/import jobs.
+  userId     String
+  at         DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@index([recordType, recordId])
+  @@index([userId])
+  @@index([at])
+  @@schema("finance")
+}

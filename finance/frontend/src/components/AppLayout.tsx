@@ -1,0 +1,152 @@
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router';
+import {
+  FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, Settings, Truck, UserRound,
+  type LucideIcon,
+} from 'lucide-react';
+import { useAuth } from '../context/auth';
+import { cn } from '../lib/utils';
+
+const SIDEBAR_STORAGE_KEY = 'bloc-finance:sidebar-expanded';
+
+type NavItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  module: string;
+  /** Not built yet: shown greyed out so the founders can see what is coming. */
+  soon?: boolean;
+};
+
+const NAV_ITEMS: NavItem[] = [
+  { to: '/', label: 'Home', icon: House, module: 'financeHome' },
+  { to: '/ledger', label: 'Bank ledger', icon: Landmark, module: 'financeBank', soon: true },
+  { to: '/review', label: 'Review queue', icon: ListChecks, module: 'financeBank', soon: true },
+  { to: '/vendors', label: 'Vendors', icon: Truck, module: 'financeVendors', soon: true },
+  { to: '/documents', label: 'Documents', icon: FileText, module: 'financeDocuments', soon: true },
+  { to: '/settings', label: 'Settings', icon: Settings, module: 'financeSettings', soon: true },
+  { to: '/audit', label: 'Audit log', icon: History, module: 'financeAudit' },
+];
+
+export function AppLayout() {
+  const { user, logout, hasPermission } = useAuth();
+  const navigate = useNavigate();
+  // On a phone the sidebar starts as icons only so the page keeps its width; the saved choice is the desktop one.
+  const isNarrow = () => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches;
+  const [expanded, setExpanded] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    if (isNarrow()) return false;
+    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) !== 'false';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || isNarrow()) return;
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, expanded ? 'true' : 'false');
+  }, [expanded]);
+
+  const items = NAV_ITEMS.filter((item) => hasPermission(item.module, 'view'));
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
+
+  return (
+    <div className="crm-shell min-h-screen flex flex-col">
+      <header className="h-14 flex items-center px-3 sm:px-8 shrink-0 bg-[#0c2c55]">
+        <div className="flex items-center justify-between w-full gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <img src="/bloc-logo.jpg" alt="Bloc" className="h-10 w-auto object-contain" />
+            <span className="font-instrument-serif text-xl text-white/90 truncate">Finance</span>
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-4">
+            {user && (
+              <NavLink to="/account" className="flex items-center gap-2" title="Your account">
+                <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-semibold">
+                  {user.firstName[0]}{user.lastName[0]}
+                </div>
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-medium text-white leading-tight">{user.firstName} {user.lastName}</p>
+                  <p className="text-xs text-white/60 leading-tight">
+                    {user.role?.name ? user.role.name.replace(/_/g, ' ') : 'No role'}
+                  </p>
+                </div>
+              </NavLink>
+            )}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white transition-colors"
+              title="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex flex-1 min-h-0">
+        <aside className={cn('bg-white border-r border-gray-200 shrink-0 transition-[width] duration-200', expanded ? 'w-[220px]' : 'w-14')}>
+          <nav className="py-4">
+            <div className={cn('pb-3', expanded ? 'px-3' : 'px-2')}>
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className={cn('w-full h-8 inline-flex items-center text-gray-500 hover:bg-gray-50 rounded-md', expanded ? 'justify-start px-3' : 'justify-center')}
+                title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+              >
+                {expanded ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+              </button>
+            </div>
+            {items.map(({ to, label, icon: Icon, soon }) =>
+              soon ? (
+                <span
+                  key={to}
+                  title={expanded ? 'Coming in a later milestone' : `${label} (coming soon)`}
+                  className={cn('flex items-center gap-3 py-2.5 text-sm text-gray-300 cursor-not-allowed', expanded ? 'px-6' : 'justify-center')}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {expanded && <span className="truncate">{label}</span>}
+                  {expanded && <span className="ml-auto text-[10px] uppercase tracking-wide">soon</span>}
+                </span>
+              ) : (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  title={!expanded ? label : undefined}
+                  className={({ isActive }) => cn(
+                    'flex items-center gap-3 py-2.5 text-sm transition-colors',
+                    expanded ? 'px-6' : 'justify-center',
+                    isActive ? 'text-blue-700 bg-blue-50/80 font-medium border-l-[3px] border-[#3B82F6]' : 'text-gray-700 hover:bg-gray-50/90',
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {expanded && <span className="truncate">{label}</span>}
+                </NavLink>
+              )
+            )}
+            <NavLink
+              to="/account"
+              title={!expanded ? 'Your account' : undefined}
+              className={({ isActive }) => cn(
+                'mt-4 flex items-center gap-3 py-2.5 text-sm border-t border-gray-100',
+                expanded ? 'px-6' : 'justify-center',
+                isActive ? 'text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-50/90',
+              )}
+            >
+              <UserRound className="h-4 w-4 shrink-0" />
+              {expanded && <span className="truncate">Your account</span>}
+            </NavLink>
+          </nav>
+        </aside>
+
+        <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto bg-gray-50 p-3 sm:p-6">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,53 @@
+import express, { NextFunction, Request, Response } from 'express';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import authRoutes from './routes/auth.routes';
+import auditRoutes from './routes/audit.routes';
+import { requireAuth } from './middleware/auth.middleware';
+import { DeleteRefusedError, refuseDelete } from './lib/audit';
+
+/** Built separately from index.ts so tests can call the API without opening a port. */
+export function createApp() {
+    const app = express();
+
+    app.use(cors({
+        origin: [process.env.FRONTEND_URL || 'http://localhost:5174'],
+        credentials: true,
+    }));
+    app.use(cookieParser());
+    app.use(express.json({ limit: '10mb' }));
+
+    // ============================
+    // PUBLIC ROUTES
+    // ============================
+    app.get('/api/health', (_req, res) => { res.json({ success: true, data: { ok: true } }); });
+    app.use('/api/auth', authRoutes);
+
+    // ============================
+    // PROTECTED ROUTES
+    // ============================
+    app.use('/api', requireAuth);
+    app.use('/api/audit', auditRoutes);
+
+    // No hard deletes anywhere (BR-43, A9): every DELETE is refused and leaves an audit row.
+    app.delete('/api/:resource/:id', async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const resource = String(req.params.resource);
+            const id = String(req.params.id);
+            await refuseDelete({ userId: req.user!.id }, resource, id);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+        if (error instanceof DeleteRefusedError) {
+            res.status(error.status).json({ success: false, error: error.message });
+            return;
+        }
+        console.error('Unhandled error:', error);
+        res.status(500).json({ success: false, error: 'Something went wrong' });
+    });
+
+    return app;
+}

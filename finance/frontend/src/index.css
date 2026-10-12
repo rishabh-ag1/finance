@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif&display=swap');
+@import "tailwindcss";
+
+/* Same visual language as Bloc's crm/frontend: navy #0c2c55 header, Inter body, Instrument Serif titles. */
+@theme {
+  --font-instrument-serif: 'Instrument Serif', Georgia, serif;
+  --color-navy: #0c2c55;
+}
+
+:root {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 15px;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #f9fafb;
+}
+
+/* Money and other figures line up in columns. */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.crm-shell main table thead th {
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.crm-shell main table tbody tr {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.crm-shell main table tbody tr:last-child {
+  border-bottom: 0;
+}
