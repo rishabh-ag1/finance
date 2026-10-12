@@ -16,12 +16,16 @@ export type AuditContext = {
 
 export type Tx = Prisma.TransactionClient;
 
-export async function withAudit<T>(ctx: AuditContext, fn: (tx: Tx) => Promise<T>): Promise<T> {
+export async function withAudit<T>(
+    ctx: AuditContext,
+    fn: (tx: Tx) => Promise<T>,
+    options: { timeoutMs?: number } = {},
+): Promise<T> {
     if (!ctx.userId) throw new Error('withAudit needs a userId');
     return prisma.$transaction(async (tx) => {
         await tx.$queryRaw`select set_config('finance.user_id', ${ctx.userId}, true), set_config('finance.reason', ${ctx.reason ?? ''}, true)`;
         return fn(tx);
-    });
+    }, { timeout: options.timeoutMs ?? 10_000, maxWait: 10_000 });
 }
 
 /** Errcodes raised by prisma/sql/finance.sql. */

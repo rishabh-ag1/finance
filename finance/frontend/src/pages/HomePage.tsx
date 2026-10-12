@@ -5,7 +5,7 @@ import { cn, CARD_SHADOW } from '../lib/utils';
 // Placeholder until milestone M7 (F130 home dashboard: cash, burn, runway, review queue).
 const MILESTONES = [
   { id: 'M0', title: 'Sign-in and audit log', done: true },
-  { id: 'M1', title: 'Settings and categories', done: false },
+  { id: 'M1', title: 'Settings and categories', done: true },
   { id: 'M2', title: 'Bank statement import', done: false },
   { id: 'M3', title: 'Ledger and review queue', done: false },
   { id: 'M4', title: 'Vendors', done: false },

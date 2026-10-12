@@ -7,6 +7,8 @@ import { LoginPage } from './pages/LoginPage';
 import { HomePage } from './pages/HomePage';
 import { AuditPage } from './pages/AuditPage';
 import { AccountPage } from './pages/AccountPage';
+import { SettingsPage } from './pages/settings/SettingsPage';
+import { CategoriesPage } from './pages/CategoriesPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,6 +33,10 @@ function App() {
                 <Route path="/account" element={<AccountPage />} />
                 <Route element={<ProtectedRoute requiredModule="financeAudit" requiredAction="view" />}>
                   <Route path="/audit" element={<AuditPage />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeSettings" requiredAction="view" />}>
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/categories" element={<CategoriesPage />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

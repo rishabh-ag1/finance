@@ -86,3 +86,260 @@ model AuditLog {
   @@index([at])
   @@schema("finance")
 }
+
+// ---------- Settings & masters (M01) ----------
+// createdBy / updatedBy are stamped by the database (finance.stamp_actor) from withAudit's user.
+
+/// F001, F002. One row in v1 (Entelechy Labs); business records point at it with entityId (D5).
+model Company {
+  id                String    @id @default(cuid())
+  legalName         String
+  brandName         String?
+  cin               String?
+  pan               String
+  tan               String?
+  gstin             String
+  udyamNo           String?
+  registeredAddress String
+  stateCode         String    @db.Char(2)
+  /// Fixed at 4 (April, BR-31).
+  fyStartMonth      Int       @default(4) @db.SmallInt
+  /// 22 May 2026. Months of the first FY before this show as zero (Q12).
+  incorporationDate DateTime? @db.Date
+  email             String?
+  phone             String?
+  logoFileId        String?
+  signatureFileId   String?
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy         String?
+
+  bankAccounts BankAccount[]
+  numberSeries NumberSeries[]
+
+  @@schema("finance")
+}
+
+enum AccountType {
+  business_current
+  cash_credit
+  founder_personal
+  loan
+  wallet
+  card
+
+  @@schema("finance")
+}
+
+/// F003. A cash credit account's balance is money drawn, a liability (BR-50).
+model BankAccount {
+  id               String      @id @default(cuid())
+  entityId         String
+  bankName         String
+  accountName      String
+  accountNumber    String
+  ifsc             String
+  branch           String?
+  accountType      AccountType
+  /// Entelechy, or the founder's name for founder_personal accounts.
+  owner            String
+  openingBalance   Decimal     @default(0) @db.Decimal(14, 2)
+  openingDate      DateTime    @db.Date
+  /// Statement parser, e.g. idfc_v1 (F010), pnb_cc_v1 (F024).
+  parserFormat     String?
+  sanctionedLimit  Decimal?    @db.Decimal(14, 2)
+  drawingPower     Decimal?    @db.Decimal(14, 2)
+  drawingPowerAsOf DateTime?   @db.Date
+  interestRate     Decimal?    @db.Decimal(6, 3)
+  renewalDate      DateTime?   @db.Date
+  isActive         Boolean     @default(true)
+  isArchived       Boolean     @default(false)
+  createdAt        DateTime    @default(now()) @db.Timestamptz(6)
+  createdBy        String?
+  updatedAt        DateTime    @updatedAt @db.Timestamptz(6)
+  updatedBy        String?
+  entity           Company     @relation(fields: [entityId], references: [id])
+
+  @@unique([bankName, accountNumber])
+  @@schema("finance")
+}
+
+/// F004. Rates are data with effective dates so a change never rewrites old documents.
+model GstRate {
+  id            String    @id @default(cuid())
+  rate          Decimal   @db.Decimal(5, 2)
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+  note          String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy     String?
+
+  @@unique([rate, effectiveFrom])
+  @@schema("finance")
+}
+
+/// F005. Seeded with old-Act values, all [Verify] until the CA confirms (Q15).
+model TdsSection {
+  id              String    @id @default(cuid())
+  codeOldAct      String
+  codeNewAct      String?
+  nature          String
+  rateIndividual  Decimal   @db.Decimal(5, 2)
+  rateOthers      Decimal   @db.Decimal(5, 2)
+  rateNoPan       Decimal   @db.Decimal(5, 2)
+  /// Deduct when one payment exceeds this.
+  singleThreshold Decimal?  @db.Decimal(14, 2)
+  /// Deduct when the FY total to the vendor exceeds this (then on the full FY amount, BR-12).
+  annualThreshold Decimal?  @db.Decimal(14, 2)
+  thresholdNote   String?
+  effectiveFrom   DateTime  @db.Date
+  effectiveTo     DateTime? @db.Date
+  verifiedByCa    Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy       String?
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy       String?
+
+  @@unique([codeOldAct, nature, effectiveFrom])
+  @@schema("finance")
+}
+
+/// F006, BR-30. pattern uses {FY} and {N}: "ELPL/{FY}/{N}". One row per document type and FY
+/// (fyLabel null = never resets, e.g. PMT-{N}). nextNumber only ever goes up (database check).
+model NumberSeries {
+  id         String   @id @default(cuid())
+  entityId   String
+  docType    String
+  fyLabel    String?
+  pattern    String
+  padding    Int      @db.SmallInt
+  nextNumber Int      @default(1)
+  /// Live series issue numbers. Tax invoice / credit note stay off until the invoicing entity
+  /// is confirmed (CLAUDE.md "Open blocker").
+  isActive   Boolean  @default(true)
+  note       String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  createdBy  String?
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy  String?
+  entity     Company  @relation(fields: [entityId], references: [id])
+
+  @@unique([entityId, docType, fyLabel])
+  @@schema("finance")
+}
+
+/// F009. Default terms per vendor and customer, copied to documents (BR-23).
+model PaymentTerm {
+  id        String   @id @default(cuid())
+  label     String   @unique
+  days      Int      @default(0)
+  /// Advance terms: due date = document date (BR-23).
+  isAdvance Boolean  @default(false)
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  createdBy String?
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy String?
+
+  @@schema("finance")
+}
+
+/// F007, BR-26. Provision only: every band is switched off at launch (Q9).
+model ApprovalRule {
+  id                String   @id @default(cuid())
+  appliesTo         String
+  amountFrom        Decimal  @db.Decimal(14, 2)
+  amountTo          Decimal? @db.Decimal(14, 2)
+  approversRequired Int      @default(1) @db.SmallInt
+  isEnabled         Boolean  @default(false)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  createdBy         String?
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy         String?
+
+  @@schema("finance")
+}
+
+/// F008, BR-36. One row per month that has ever been locked; unlocking keeps the row with the
+/// reason (the AuditLog keeps every lock and unlock).
+model PeriodLock {
+  id           String    @id @default(cuid())
+  entityId     String
+  /// First day of the month.
+  month        DateTime  @db.Date
+  isLocked     Boolean   @default(true)
+  lockedAt     DateTime  @default(now()) @db.Timestamptz(6)
+  lockedBy     String
+  unlockedAt   DateTime? @db.Timestamptz(6)
+  unlockedBy   String?
+  unlockReason String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy    String?
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy    String?
+
+  @@unique([entityId, month])
+  @@schema("finance")
+}
+
+// ---------- Categories (BR-04) ----------
+
+enum TxnNature {
+  operating_income
+  operating_expense
+  cogs
+  capex
+  financing_in
+  financing_out
+  interest
+  tax_payment
+  advance
+  transfer
+  related_party
+  refund_reversal
+  reimbursement
+
+  @@schema("finance")
+}
+
+/// Seeded from the Category Master table in docs/spec.md.
+model Category {
+  id            String        @id @default(cuid())
+  name          String        @unique
+  natureDefault TxnNature
+  sortOrder     Int           @default(0)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now()) @db.Timestamptz(6)
+  createdBy     String?
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(6)
+  updatedBy     String?
+  subCategories SubCategory[]
+
+  @@schema("finance")
+}
+
+model SubCategory {
+  id             String     @id @default(cuid())
+  categoryId     String
+  name           String
+  /// Set only when this sub-category's nature differs from its category's default.
+  natureOverride TxnNature?
+  /// Management P&L group (Revenue, Fulfilment, Capex (not in P&L), ...).
+  plGroup        String?
+  note           String?
+  sortOrder      Int        @default(0)
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now()) @db.Timestamptz(6)
+  createdBy      String?
+  updatedAt      DateTime   @updatedAt @db.Timestamptz(6)
+  updatedBy      String?
+  category       Category   @relation(fields: [categoryId], references: [id])
+
+  @@unique([categoryId, name])
+  @@schema("finance")
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
 import {
-  FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, Settings, Truck, UserRound,
+  FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, Settings, Tags, Truck, UserRound,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../context/auth';
@@ -24,7 +24,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/review', label: 'Review queue', icon: ListChecks, module: 'financeBank', soon: true },
   { to: '/vendors', label: 'Vendors', icon: Truck, module: 'financeVendors', soon: true },
   { to: '/documents', label: 'Documents', icon: FileText, module: 'financeDocuments', soon: true },
-  { to: '/settings', label: 'Settings', icon: Settings, module: 'financeSettings', soon: true },
+  { to: '/categories', label: 'Categories', icon: Tags, module: 'financeSettings' },
+  { to: '/settings', label: 'Settings', icon: Settings, module: 'financeSettings' },
   { to: '/audit', label: 'Audit log', icon: History, module: 'financeAudit' },
 ];
 

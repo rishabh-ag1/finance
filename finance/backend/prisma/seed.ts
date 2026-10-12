@@ -5,6 +5,7 @@ import { prisma } from '../src/config/database';
 import { withAudit } from '../src/lib/audit';
 import { adminPermissions } from '../src/lib/permissions';
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../src/services/auth.service';
+import { seedMasters } from '../src/services/seed.service';
 
 // v1 users: the two founders only, both Admin (Q18). Re-running the seed never resets a
 // password that is already set.
@@ -41,7 +42,8 @@ async function main() {
         throw new Error(`Set SEED_ADMIN_PASSWORD in .env (at least ${MIN_PASSWORD_LENGTH} characters) before seeding.`);
     }
     await seedUsersAndRoles(firstPassword);
-    console.log('Seeded role FINANCE_ADMIN and the two founders.');
+    await withAudit({ userId: 'system', reason: 'seed' }, (tx) => seedMasters(tx), { timeoutMs: 120_000 });
+    console.log('Seeded role FINANCE_ADMIN, the two founders, company, IDFC account, tax masters, number series, payment terms, approval bands (off) and the Category Master.');
 }
 
 if (require.main === module) {

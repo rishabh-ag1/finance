@@ -289,7 +289,7 @@
 
 - **Module:** M01
 - **Trigger:** Month locked
-- **Logic:** No create/edit/delete of records dated in a locked month. Admin unlock requires a reason and is audited. Lock requires zero rows in Review for that month.
+- **Logic:** No create/edit/delete of records dated in a locked month. Admin unlock requires a reason and is audited. Lock requires zero rows in Review for that month, and only a month that has ended can be locked.
 - **Worked example:** -
 - **Confidence:** High
 

@@ -4,7 +4,10 @@ import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.routes';
 import auditRoutes from './routes/audit.routes';
 import { requireAuth } from './middleware/auth.middleware';
+import settingsRoutes from './routes/settings.routes';
+import categoryRoutes from './routes/category.routes';
 import { DeleteRefusedError, refuseDelete } from './lib/audit';
+import { UserError } from './lib/http';
 
 /** Built separately from index.ts so tests can call the API without opening a port. */
 export function createApp() {
@@ -28,6 +31,8 @@ export function createApp() {
     // ============================
     app.use('/api', requireAuth);
     app.use('/api/audit', auditRoutes);
+    app.use('/api/settings', settingsRoutes);
+    app.use('/api/categories', categoryRoutes);
 
     // No hard deletes anywhere (BR-43, A9): every DELETE is refused and leaves an audit row.
     app.delete('/api/:resource/:id', async (req: Request, res: Response, next: NextFunction) => {
@@ -41,7 +46,7 @@ export function createApp() {
     });
 
     app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-        if (error instanceof DeleteRefusedError) {
+        if (error instanceof DeleteRefusedError || error instanceof UserError) {
             res.status(error.status).json({ success: false, error: error.message });
             return;
         }
