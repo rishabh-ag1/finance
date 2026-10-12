@@ -1,0 +1,4 @@
+# Same line endings as the Bloc repo (macOS/EC2): LF everywhere, so shell hooks run.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
