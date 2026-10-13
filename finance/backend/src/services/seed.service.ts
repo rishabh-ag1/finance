@@ -137,6 +137,14 @@ export async function seedMasters(tx: Tx): Promise<{ companyId: string }> {
         await tx.paymentTerm.upsert({ where: { label: t.label }, update: {}, create: { ...t, sortOrder: (i + 1) * 10 } });
     }
 
+    // F041: the registered office as the first delivery address. Others (e.g. Ambala CM premises)
+    // are added in Settings with their real address.
+    await tx.deliveryAddress.upsert({
+        where: { label: 'Bangalore office' },
+        update: {},
+        create: { label: 'Bangalore office', address: company.registeredAddress, stateCode: company.stateCode },
+    });
+
     if ((await tx.approvalRule.count()) === 0) {
         for (const appliesTo of ['purchase_order', 'payment']) {
             for (const b of APPROVAL_BANDS) {

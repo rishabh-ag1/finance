@@ -38,6 +38,8 @@ export const DOC_KIND_LABEL: Record<string, string> = {
   statement: 'Bank statement',
   proof: 'Proof',
   bill: 'Bill',
+  po_pdf: 'Purchase order',
+  quote: 'Quote',
   other: 'Document',
 };
 
@@ -88,6 +90,12 @@ export async function recordContext(recordType: string, recordId: string): Promi
       const to = dateText(b.periodTo)!;
       const name = `${b.bankAccount.bankName.split(' ')[0]} ${from} to ${to}`;
       return { fy: fyLabel(from), module: 'Bank statements', record: name, nameBase: name };
+    }
+    case 'PurchaseOrder': {
+      const po = await prisma.purchaseOrder.findUnique({ where: { id: recordId }, include: { vendor: true } });
+      if (!po) throw new UserError('Purchase order not found', 404);
+      const record = po.poNumber ?? `Draft ${po.id.slice(-6)}`;
+      return { fy: fyLabel(dateText(po.poDate)!), module: 'Purchase orders', record, nameBase: `${record}_${po.vendor.displayName}` };
     }
     default:
       throw new UserError(`Files cannot be attached to ${recordType}`);

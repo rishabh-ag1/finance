@@ -251,6 +251,88 @@ alter table finance."VendorBankAccount" add constraint vendor_bank_decision chec
   ("status" = 'pending') = ("decidedBy" is null)
 );
 
+-- ---------------------------------------------------------------------------
+-- Purchase orders (M04)
+-- ---------------------------------------------------------------------------
+alter table finance."PoLine" drop constraint if exists po_line_amounts;
+alter table finance."PoLine" add constraint po_line_amounts check (
+  "qty" > 0 and "rate" >= 0 and "discount" >= 0 and "taxable" >= 0 and "gstRate" >= 0
+  and "lineTotal" = "taxable" + "cgst" + "sgst" + "igst"
+);
+alter table finance."PurchaseOrder" drop constraint if exists po_shape;
+alter table finance."PurchaseOrder" add constraint po_shape check (
+  "gstMode" in ('cgst_sgst', 'igst', 'none')
+  and ("status" in ('draft', 'pending_approval', 'cancelled') or "poNumber" is not null)
+  and "total" = "taxable" + "cgst" + "sgst" + "igst" + "roundOff"
+  and ("status" not in ('closed', 'cancelled') or length(trim(coalesce("statusReason", ''))) > 0)
+);
+
+-- Issued documents are immutable (CLAUDE.md, BR-30). Once a PO has a number, the number never
+-- changes, it never goes back to draft, and its vendor, date, place of supply and amounts change
+-- only through an amendment (F046), which sets finance.po_amend inside its transaction.
+-- Billing, payment and send/close fields stay writable.
+create or replace function finance.po_issued_fixed() returns trigger
+language plpgsql as $$
+begin
+  if old."poNumber" is not null then
+    if new."poNumber" is distinct from old."poNumber" then
+      raise exception 'finance: PO number % cannot change', old."poNumber" using errcode = 'P0008';
+    end if;
+    if new."status" = 'draft' then
+      raise exception 'finance: issued PO % cannot go back to draft', old."poNumber" using errcode = 'P0008';
+    end if;
+    if coalesce(current_setting('finance.po_amend', true), '') <> 'on' and (
+         new."vendorId" is distinct from old."vendorId" or new."poDate" is distinct from old."poDate"
+      or new."placeOfSupplyState" is distinct from old."placeOfSupplyState" or new."gstMode" is distinct from old."gstMode"
+      or new."deliveryAddress" is distinct from old."deliveryAddress"
+      or new."taxable" is distinct from old."taxable" or new."total" is distinct from old."total"
+      or new."cgst" is distinct from old."cgst" or new."sgst" is distinct from old."sgst" or new."igst" is distinct from old."igst"
+      or new."revisionNo" is distinct from old."revisionNo") then
+      raise exception 'finance: PO % is issued; change it with an amendment', old."poNumber" using errcode = 'P0008';
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists po_issued_fixed on finance."PurchaseOrder";
+create trigger po_issued_fixed before update on finance."PurchaseOrder"
+  for each row execute function finance.po_issued_fixed();
+
+-- Lines of an issued PO: only qtyBilled moves, unless an amendment is running.
+create or replace function finance.po_line_fixed() returns trigger
+language plpgsql as $$
+declare
+  po record;
+begin
+  select "poNumber" into po from finance."PurchaseOrder" where id = new."poId";
+  if po."poNumber" is null or coalesce(current_setting('finance.po_amend', true), '') = 'on' then
+    return new;
+  end if;
+  if tg_op = 'INSERT' or (to_jsonb(new) - 'qtyBilled' - 'updatedAt' - 'updatedBy')
+                          is distinct from (to_jsonb(old) - 'qtyBilled' - 'updatedAt' - 'updatedBy') then
+    raise exception 'finance: PO % is issued; change its lines with an amendment', po."poNumber" using errcode = 'P0008';
+  end if;
+  return new;
+end $$;
+drop trigger if exists po_line_fixed on finance."PoLine";
+create trigger po_line_fixed before insert or update on finance."PoLine"
+  for each row execute function finance.po_line_fixed();
+
+-- BR-36: no PO created, re-dated or issued in a locked month.
+create or replace function finance.po_month_open() returns trigger
+language plpgsql as $$
+begin
+  if (tg_op = 'INSERT' or new."poDate" is distinct from old."poDate"
+      or (old."poNumber" is null and new."poNumber" is not null))
+     and finance.is_month_locked(new."entityId", new."poDate") then
+    raise exception 'finance: % is in a locked month; unlock it in Settings > Period lock first', new."poDate"
+      using errcode = 'P0007';
+  end if;
+  return new;
+end $$;
+drop trigger if exists po_month_open on finance."PurchaseOrder";
+create trigger po_month_open before insert or update on finance."PurchaseOrder"
+  for each row execute function finance.po_month_open();
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$

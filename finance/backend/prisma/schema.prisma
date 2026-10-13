@@ -411,6 +411,7 @@ model Vendor {
   updatedAt            DateTime     @updatedAt @db.Timestamptz(6)
   updatedBy            String?
   bankAccounts         VendorBankAccount[]
+  purchaseOrders       PurchaseOrder[]
 
   @@index([displayName])
   @@index([pan])
@@ -718,5 +719,164 @@ model SubCategory {
   category       Category   @relation(fields: [categoryId], references: [id])
 
   @@unique([categoryId, name])
+  @@schema("finance")
+}
+
+// ============================================================================
+// M04 Purchase Orders (Phase 2)
+// ============================================================================
+
+/// Saved delivery addresses for POs (F041): Bangalore office, Ambala CM premises, ...
+model DeliveryAddress {
+  id        String   @id @default(cuid())
+  label     String   @unique
+  address   String
+  stateCode String   @db.Char(2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  createdBy String?
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy String?
+
+  @@schema("finance")
+}
+
+/// Purchase catalogue (F042): things we buy, with HSN and the last rate paid.
+model PurchaseItem {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  hsnSac            String?
+  unit              String   @default("Nos")
+  defaultGstRate    Decimal? @db.Decimal(5, 2)
+  preferredVendorId String?
+  lastRate          Decimal? @db.Decimal(14, 4)
+  isArchived        Boolean  @default(false)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  createdBy         String?
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy         String?
+
+  @@schema("finance")
+}
+
+/// Stored, but never typed: draft -> approved (issue) -> sent -> closed / cancelled are actions;
+/// partially_billed / fully_billed are computed from linked tax invoices (BR-17).
+enum PoStatus {
+  draft
+  pending_approval
+  approved
+  sent
+  partially_billed
+  fully_billed
+  closed
+  cancelled
+
+  @@schema("finance")
+}
+
+model PurchaseOrder {
+  id                   String    @id @default(cuid())
+  entityId             String
+  /// Assigned on Issue only (BR-30). Null while draft.
+  poNumber             String?   @unique
+  poDate               DateTime  @db.Date
+  vendorId             String
+  expectedDeliveryDate DateTime? @db.Date
+  deliveryAddressId    String?
+  deliveryAddress      String
+  /// Place of supply = delivery state (BR-20).
+  placeOfSupplyState   String    @db.Char(2)
+  /// cgst_sgst, igst or none, from vendor state vs place of supply.
+  gstMode              String
+  quoteRef             String?
+  paymentTermId        String?
+  paymentTermsText     String?
+  /// [{label, percent, trigger}] (F043)
+  milestones           Json      @default("[]")
+  termsText            String?
+  notes                String?
+  taxable              Decimal   @default(0) @db.Decimal(14, 2)
+  cgst                 Decimal   @default(0) @db.Decimal(14, 2)
+  sgst                 Decimal   @default(0) @db.Decimal(14, 2)
+  igst                 Decimal   @default(0) @db.Decimal(14, 2)
+  roundOff             Decimal   @default(0) @db.Decimal(14, 2)
+  total                Decimal   @default(0) @db.Decimal(14, 2)
+  /// Kept up to date from vendor documents (M05) and payments (M06).
+  billedTaxable        Decimal   @default(0) @db.Decimal(14, 2)
+  billedTotal          Decimal   @default(0) @db.Decimal(14, 2)
+  paidTotal            Decimal   @default(0) @db.Decimal(14, 2)
+  advanceTotal         Decimal   @default(0) @db.Decimal(14, 2)
+  status               PoStatus  @default(draft)
+  statusReason         String?
+  revisionNo           Int       @default(0)
+  /// Only used when approval bands are switched on (BR-26): [{userId, at}].
+  approvals            Json      @default("[]")
+  issuedAt             DateTime? @db.Timestamptz(6)
+  issuedBy             String?
+  sentAt               DateTime? @db.Timestamptz(6)
+  sentVia              String?
+  closedAt             DateTime? @db.Timestamptz(6)
+  pdfAttachmentId      String?
+  templateVersion      String?
+  /// Vendor and company details frozen at issue (issued documents are immutable).
+  vendorSnapshot       Json?
+  companySnapshot      Json?
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy            String?
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy            String?
+  vendor               Vendor    @relation(fields: [vendorId], references: [id])
+  lines                PoLine[]
+  revisions            PoRevision[]
+
+  @@index([vendorId])
+  @@index([status])
+  @@schema("finance")
+}
+
+model PoLine {
+  id             String        @id @default(cuid())
+  poId           String
+  lineNo         Int
+  purchaseItemId String?
+  description    String
+  hsnSac         String?
+  qty            Decimal       @db.Decimal(14, 3)
+  unit           String        @default("Nos")
+  rate           Decimal       @db.Decimal(14, 4)
+  discount       Decimal       @default(0) @db.Decimal(14, 2)
+  gstRate        Decimal       @db.Decimal(5, 2)
+  taxable        Decimal       @db.Decimal(14, 2)
+  cgst           Decimal       @db.Decimal(14, 2)
+  sgst           Decimal       @db.Decimal(14, 2)
+  igst           Decimal       @db.Decimal(14, 2)
+  lineTotal      Decimal       @db.Decimal(14, 2)
+  qtyBilled      Decimal       @default(0) @db.Decimal(14, 3)
+  /// Lines are never deleted: an edit archives the old lines and adds new ones.
+  isArchived     Boolean       @default(false)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+  createdBy      String?
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
+  updatedBy      String?
+  po             PurchaseOrder @relation(fields: [poId], references: [id])
+
+  @@index([poId])
+  @@schema("finance")
+}
+
+/// F046 amendment: the PO as it was before revision N, with the reason.
+model PoRevision {
+  id         String        @id @default(cuid())
+  poId       String
+  revisionNo Int
+  reason     String
+  before     Json
+  createdAt  DateTime      @default(now()) @db.Timestamptz(6)
+  createdBy  String?
+  updatedAt  DateTime      @updatedAt @db.Timestamptz(6)
+  updatedBy  String?
+  po         PurchaseOrder @relation(fields: [poId], references: [id])
+
+  @@unique([poId, revisionNo])
   @@schema("finance")
 }

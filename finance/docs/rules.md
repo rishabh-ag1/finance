@@ -138,7 +138,7 @@
 - **Module:** M04
 - **Trigger:** Bill linked or payment made against a PO
 - **Logic:** Billed % = sum of linked tax invoice taxable values / PO taxable value. 0% = Issued; between 0 and 100% = Partially Billed; 100% = Fully Billed. A bill that pushes billed value above PO value + tolerance (default 0%) needs approval or a PO amendment.
-- **Worked example:** Saiffi PO ELPL/PO/2026/001 value ₹28,91,000, billed so far ₹9,80,000 taxable on bill 040 = Partially Billed. [Check: PO value may be GST-inclusive; status logic must compare like for like.]
+- **Worked example:** Saiffi PO ELPL/PO/2026/001 value ₹28,91,000, billed so far ₹9,80,000 taxable on bill 040 = Partially Billed. Compared like for like on taxable value (excluding GST); BR-17 test.
 - **Confidence:** High
 
 ## BR-18 - Net payable
@@ -161,16 +161,16 @@
 
 - **Module:** M04/M05/M09
 - **Trigger:** Line saved
-- **Logic:** Compare supplier state and place of supply. Same state: CGST = SGST = rate/2. Different state: IGST = rate. Our state = 29 (Karnataka). Purchases: supplier state from vendor GSTIN; place of supply from delivery address. Sales: place of supply = ship-to state for goods.
+- **Logic:** Compare supplier state and place of supply. Same state: CGST = SGST = rate/2. Different state: IGST = rate. Our state = 29 (Karnataka). Purchases: supplier state from vendor GSTIN; place of supply from delivery address. Sales: place of supply = ship-to state for goods. A supplier not registered for GST charges no GST. The rate on a line must be a GST rate in force on the document date (GST rate master).
 - **Worked example:** Saiffi (06 Haryana) supplying to Entelechy (29) should be IGST 18%; Makenica (29) should be CGST 9% + SGST 9%.
 - **Confidence:** High
 
 ## BR-21 - Rounding and amount in words
 
-- **Module:** M09
+- **Module:** M04/M05/M09
 - **Trigger:** Document totals
 - **Logic:** Line amounts to 2 decimals; tax per line to 2 decimals; document total rounded to nearest rupee with a separate 'Round off' line (max ±0.99). Amount in words in Indian format (lakh, crore).
-- **Worked example:** ₹37,401.28 shows as ₹37,401.00 with round off (0.28).
+- **Worked example:** ₹37,401.28 shows as ₹37,401.00 with round off (0.28). Tax half-up per line: 2.5% of ₹999.00 = ₹24.975 shows as ₹24.98. ₹11,36,800 in words: Rupees Eleven Lakh Thirty Six Thousand Eight Hundred Only.
 - **Confidence:** High
 
 ## BR-22 - Overdue status
@@ -241,7 +241,7 @@
 
 - **Module:** M09/M04
 - **Trigger:** Document issued (not when drafted)
-- **Logic:** Next number taken from the series inside a database transaction. Tax invoice and credit note numbers: unique per FY, consecutive, max 16 characters, only letters, digits, '-' and '/'. Numbers are never reused, including for cancelled documents. Series reset on 1 April.
+- **Logic:** Next number taken from the series inside a database transaction. Tax invoice and credit note numbers: unique per FY, consecutive, max 16 characters, only letters, digits, '-' and '/'. Numbers are never reused, including for cancelled documents. Series reset on 1 April: a per-FY series gets a new row for the new FY starting at 1, with the same pattern. Two people issuing at once get consecutive numbers (the series row is locked during the issue).
 - **Worked example:** ELPL/26-27/0001 = 15 characters.
 - **Confidence:** High
 

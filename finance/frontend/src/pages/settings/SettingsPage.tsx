@@ -7,6 +7,7 @@ import { TaxTab } from './TaxTab';
 import { SeriesTab } from './SeriesTab';
 import { TermsTab } from './TermsTab';
 import { PeriodLockTab } from './PeriodLockTab';
+import { PurchasingTab } from './PurchasingTab';
 
 const TABS = [
   { key: 'company', label: 'Company & FY', body: CompanyTab },
@@ -14,6 +15,7 @@ const TABS = [
   { key: 'tax', label: 'GST & TDS', body: TaxTab },
   { key: 'series', label: 'Numbering', body: SeriesTab },
   { key: 'terms', label: 'Terms & approvals', body: TermsTab },
+  { key: 'purchasing', label: 'Purchasing', body: PurchasingTab },
   { key: 'locks', label: 'Period lock', body: PeriodLockTab },
 ] as const;
 

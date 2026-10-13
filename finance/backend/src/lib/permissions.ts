@@ -9,6 +9,7 @@ export const FINANCE_MODULES = {
     financeBank: 'Bank import and ledger',
     financeRules: 'Categorisation rules',
     financeVendors: 'Vendors',
+    financePurchases: 'Purchase orders',
     financeDocuments: 'Documents vault',
     financeUsers: 'Users and roles',
     financeAudit: 'Audit log',

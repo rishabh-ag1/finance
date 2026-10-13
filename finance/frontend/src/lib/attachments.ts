@@ -2,7 +2,7 @@
 
 export const DOC_KINDS: Record<string, string> = {
   gst_cert: 'GST certificate', pan: 'PAN card', cancelled_cheque: 'Cancelled cheque', msme_cert: 'Udyam certificate',
-  agreement: 'Agreement', statement: 'Bank statement', proof: 'Proof', bill: 'Bill', other: 'Other document',
+  agreement: 'Agreement', statement: 'Bank statement', proof: 'Proof', bill: 'Bill', po_pdf: 'Purchase order', quote: 'Quote', other: 'Other document',
 };
 
 export const MAX_MB = 15;

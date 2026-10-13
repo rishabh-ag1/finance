@@ -18,6 +18,9 @@ import { VendorsPage } from './pages/vendors/VendorsPage';
 import { VendorPage } from './pages/vendors/VendorPage';
 import { DocumentsPage } from './pages/DocumentsPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
+import { PurchaseOrdersPage } from './pages/purchases/PurchaseOrdersPage';
+import { PoFormPage } from './pages/purchases/PoFormPage';
+import { PoPage } from './pages/purchases/PoPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +43,13 @@ function App() {
               <Route element={<AppLayout />}>
                 <Route index element={<HomePage />} />
                 <Route path="/account" element={<AccountPage />} />
+                <Route element={<ProtectedRoute requiredModule="financePurchases" requiredAction="view" />}>
+                  <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+                  <Route path="/purchase-orders/new" element={<PoFormPage mode="new" />} />
+                  <Route path="/purchase-orders/:id" element={<PoPage />} />
+                  <Route path="/purchase-orders/:id/edit" element={<PoFormPage mode="edit" />} />
+                  <Route path="/purchase-orders/:id/amend" element={<PoFormPage mode="amend" />} />
+                </Route>
                 <Route element={<ProtectedRoute requiredModule="financeHome" requiredAction="view" />}>
                   <Route path="/analytics" element={<AnalyticsPage />} />
                 </Route>

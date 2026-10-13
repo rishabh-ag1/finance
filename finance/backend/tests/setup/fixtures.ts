@@ -19,7 +19,7 @@ export async function loggedInFounder(app: Express) {
     const user = await withAudit({ userId: 'system' }, async (tx) => {
         const role = await tx.role.upsert({
             where: { name: 'TEST_ADMIN' },
-            update: {},
+            update: { permissions: adminPermissions() },
             create: { name: 'TEST_ADMIN', permissions: adminPermissions() },
         });
         return tx.user.create({
