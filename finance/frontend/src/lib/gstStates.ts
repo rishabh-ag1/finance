@@ -13,3 +13,6 @@ export const GST_STATES: Record<string, string> = {
 
 
 export const stateLabel = (code: string | null | undefined) => (code ? `${GST_STATES[code] ?? code} (${code})` : '—');
+
+/** Codes in order (01, 02 ...): object keys like "10" would otherwise sort before "01". */
+export const GST_STATE_LIST = Object.entries(GST_STATES).sort(([a], [b]) => a.localeCompare(b));

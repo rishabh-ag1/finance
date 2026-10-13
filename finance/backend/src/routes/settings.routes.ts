@@ -26,6 +26,7 @@ router.put('/company', edit, handler((req) => settings.updateCompany(ctx(req), p
     email: optText,
     phone: optText,
     incorporationDate: optDate,
+    taxInvoiceChaseDays: z.number().int().min(1).max(365).optional(),
 }), req.body))));
 
 // ---------- Bank accounts ----------

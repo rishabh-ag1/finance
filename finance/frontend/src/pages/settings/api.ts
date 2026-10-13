@@ -7,7 +7,7 @@ export type FyInfo = { startMonth: number; current: { from: string; to: string; 
 export type Company = {
   id: string; legalName: string; brandName: string | null; cin: string | null; pan: string; tan: string | null; gstin: string;
   udyamNo: string | null; registeredAddress: string; stateCode: string; email: string | null; phone: string | null;
-  incorporationDate: string | null; fy: FyInfo;
+  incorporationDate: string | null; taxInvoiceChaseDays: number; fy: FyInfo;
 };
 export type AccountType = 'business_current' | 'cash_credit' | 'founder_personal' | 'loan' | 'wallet' | 'card';
 export type BankAccount = {

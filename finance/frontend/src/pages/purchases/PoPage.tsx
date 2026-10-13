@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Download, Send } from 'lucide-react';
 import api from '../../api';
 import { Attachments } from '../../components/Attachments';
@@ -12,6 +12,7 @@ import { stateLabel } from '../../lib/gstStates';
 import { formatINR } from '../../lib/money';
 import { apiErrorMessage } from '../../lib/utils';
 import { dateLabel } from '../settings/api';
+import { DOC_STATUS_TONE, type BillRow } from '../bills/api';
 import { GST_MODE_LABEL, PO_STATUS_TONE, usePo, type Po } from './api';
 
 const linkButton = 'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium';
@@ -25,6 +26,12 @@ export function PoPage() {
   const { data: po, isLoading } = usePo(id);
   const [asking, setAsking] = useState<'close' | 'cancel' | 'reject' | null>(null);
   const [reason, setReason] = useState('');
+  const canSeeBills = hasPermission('financeBills', 'view');
+  const { data: bills } = useQuery({
+    enabled: canSeeBills && !!id,
+    queryKey: ['bills', 'po', id],
+    queryFn: async () => (await api.get<{ data: { rows: BillRow[] } }>('/bills', { params: { poId: id } })).data.data.rows,
+  });
 
   const act = useMutation({
     mutationFn: async ({ action, payload }: { action: string; payload?: object }) => (await api.post<{ data: Po }>(`/purchases/pos/${id}/${action}`, payload ?? {})).data.data,
@@ -156,6 +163,26 @@ export function PoPage() {
           </tfoot>
         </table>
       </Card>
+
+      {canSeeBills && issued && (
+        <Card className="p-4 sm:p-6 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-semibold text-gray-900">Vendor documents</h2>
+            {hasPermission('financeBills', 'edit') && ['approved', 'sent', 'partially_billed'].includes(po.status) && (
+              <Link to={`/bills/new?poId=${po.id}`} className={`${linkButton} bg-white border border-gray-200 text-gray-800 hover:bg-gray-50`}>Record bill</Link>
+            )}
+          </div>
+          {bills?.length === 0 && <p className="text-sm text-gray-500">No bills or proformas linked yet.</p>}
+          <ul className="divide-y divide-gray-100 text-sm">
+            {bills?.map((b) => (
+              <li key={b.id} className="py-2 flex items-center justify-between gap-2">
+                <Link to={`/bills/${b.id}`} className="text-blue-700 hover:underline">{b.docTypeLabel} {b.docNumber} · {dateLabel(b.docDate)}</Link>
+                <span className="flex items-center gap-2"><span className="num">{formatINR(b.totalValue)}</span><Chip tone={DOC_STATUS_TONE[b.status]}>{b.statusLabel}</Chip></span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {po.revisions.length > 0 && (
         <Card className="p-4 sm:p-6 space-y-2">

@@ -11,6 +11,7 @@ import vendorRoutes from './routes/vendor.routes';
 import attachmentRoutes from './routes/attachment.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import purchaseRoutes from './routes/purchase.routes';
+import billRoutes from './routes/bill.routes';
 import { DeleteRefusedError, refuseDelete } from './lib/audit';
 import { UserError } from './lib/http';
 
@@ -44,6 +45,7 @@ export function createApp() {
     app.use('/api/attachments', attachmentRoutes);
     app.use('/api/dashboard', dashboardRoutes);
     app.use('/api/purchases', purchaseRoutes);
+    app.use('/api/bills', billRoutes);
 
     // No hard deletes anywhere (BR-43, A9): every DELETE is refused and leaves an audit row.
     app.delete('/api/:resource/:id', async (req: Request, res: Response, next: NextFunction) => {
@@ -59,6 +61,12 @@ export function createApp() {
     app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
         if (error instanceof DeleteRefusedError || error instanceof UserError) {
             res.status(error.status).json({ success: false, error: error.message });
+            return;
+        }
+        // Rules enforced by the database (prisma/sql/finance.sql) explain themselves: show that text.
+        const ruleMessage = (error instanceof Error ? error.message : String(error)).match(/finance: ([^"\\\n]+)/)?.[1];
+        if (ruleMessage) {
+            res.status(409).json({ success: false, error: ruleMessage.charAt(0).toUpperCase() + ruleMessage.slice(1) });
             return;
         }
         console.error('Unhandled error:', error);

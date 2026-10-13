@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api';
 import { Button, Card, Chip, ErrorNote, Field, Modal, Select, TextInput } from '../../components/ui/kit';
 import { useAuth } from '../../context/auth';
-import { GST_STATES, stateLabel } from '../../lib/gstStates';
+import { GST_STATE_LIST, stateLabel } from '../../lib/gstStates';
 import { formatINR } from '../../lib/money';
 import { apiErrorMessage } from '../../lib/utils';
 import { useDeliveryAddresses, usePurchaseItems, type DeliveryAddress, type PurchaseItem } from '../purchases/api';
@@ -82,7 +82,7 @@ function AddressForm({ address, onClose }: { address: DeliveryAddress | null; on
       <Field label="State">
         <Select value={f.stateCode} onChange={(e) => setF({ ...f, stateCode: e.target.value })}>
           <option value="">Choose</option>
-          {Object.entries(GST_STATES).map(([c, n]) => <option key={c} value={c}>{n} ({c})</option>)}
+          {GST_STATE_LIST.map(([c, n]) => <option key={c} value={c}>{n} ({c})</option>)}
         </Select>
       </Field>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.isActive} onChange={(e) => setF({ ...f, isActive: e.target.checked })} /> In use</label>

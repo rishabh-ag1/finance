@@ -97,6 +97,12 @@ export async function recordContext(recordType: string, recordId: string): Promi
       const record = po.poNumber ?? `Draft ${po.id.slice(-6)}`;
       return { fy: fyLabel(dateText(po.poDate)!), module: 'Purchase orders', record, nameBase: `${record}_${po.vendor.displayName}` };
     }
+    case 'VendorDocument': {
+      const d = await prisma.vendorDocument.findUnique({ where: { id: recordId }, include: { vendor: true } });
+      if (!d) throw new UserError('Document not found', 404);
+      const record = `${d.vendor.displayName} ${d.docNumber}`;
+      return { fy: d.fyLabel, module: 'Vendor bills', record, nameBase: `${d.vendor.displayName}_${d.docNumber}` };
+    }
     default:
       throw new UserError(`Files cannot be attached to ${recordType}`);
   }

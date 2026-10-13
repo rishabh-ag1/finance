@@ -333,6 +333,81 @@ drop trigger if exists po_month_open on finance."PurchaseOrder";
 create trigger po_month_open before insert or update on finance."PurchaseOrder"
   for each row execute function finance.po_month_open();
 
+-- ---------------------------------------------------------------------------
+-- Vendor documents (M05)
+-- ---------------------------------------------------------------------------
+-- BR-19: one document number per vendor per FY (case and spaces ignored). A cancelled entry
+-- (entered in error) does not block entering it again.
+drop index if exists finance.vendor_doc_number_uq;
+create unique index vendor_doc_number_uq on finance."VendorDocument" ("vendorId", "fyLabel", "docNumberKey")
+  where "status" <> 'cancelled';
+
+alter table finance."VendorDocument" drop constraint if exists vendor_doc_shape;
+alter table finance."VendorDocument" add constraint vendor_doc_shape check (
+  "gstMode" in ('cgst_sgst', 'igst', 'none')
+  and "totalValue" = "taxableValue" + "cgst" + "sgst" + "igst" + "otherCharges" + "roundOff"
+  and "taxableValue" >= 0 and "otherCharges" >= 0 and "tdsAmount" >= 0 and "tdsBase" >= 0
+  and (not "tdsApplicable" or "tdsSectionId" is not null)
+  and ("status" not in ('cancelled', 'disputed') or length(trim(coalesce("statusReason", ''))) > 0)
+  and ("docType" not in ('debit_note', 'credit_note') or "againstDocumentId" is not null)
+  and length(trim("docNumber")) > 0
+);
+alter table finance."VendorDocumentLine" drop constraint if exists vendor_doc_line_amounts;
+alter table finance."VendorDocumentLine" add constraint vendor_doc_line_amounts check (
+  "qty" > 0 and "rate" >= 0 and "discount" >= 0 and "taxable" >= 0 and "gstRate" >= 0
+  and "lineTotal" = "taxable" + "cgst" + "sgst" + "igst"
+);
+
+-- A paid, replaced or cancelled document is closed: only its payment figures and status move.
+create or replace function finance.vendor_doc_closed_fixed() returns trigger
+language plpgsql as $$
+begin
+  if old."status" in ('paid', 'replaced', 'cancelled')
+     and (to_jsonb(new) - array['status', 'statusReason', 'advancesApplied', 'paidAmount', 'notesAdjustment',
+                                'netPayable', 'outstanding', 'updatedAt', 'updatedBy'])
+         is distinct from
+         (to_jsonb(old) - array['status', 'statusReason', 'advancesApplied', 'paidAmount', 'notesAdjustment',
+                                'netPayable', 'outstanding', 'updatedAt', 'updatedBy']) then
+    raise exception 'finance: vendor document % is %; it cannot be edited', old."docNumber", old."status"
+      using errcode = 'P0009';
+  end if;
+  return new;
+end $$;
+drop trigger if exists vendor_doc_closed_fixed on finance."VendorDocument";
+create trigger vendor_doc_closed_fixed before update on finance."VendorDocument"
+  for each row execute function finance.vendor_doc_closed_fixed();
+
+create or replace function finance.vendor_doc_line_fixed() returns trigger
+language plpgsql as $$
+declare
+  d record;
+begin
+  select "docNumber", "status" into d from finance."VendorDocument" where id = new."docId";
+  if d."status" in ('paid', 'replaced', 'cancelled') then
+    raise exception 'finance: vendor document % is %; its lines cannot change', d."docNumber", d."status"
+      using errcode = 'P0009';
+  end if;
+  return new;
+end $$;
+drop trigger if exists vendor_doc_line_fixed on finance."VendorDocumentLine";
+create trigger vendor_doc_line_fixed before insert or update on finance."VendorDocumentLine"
+  for each row execute function finance.vendor_doc_line_fixed();
+
+-- BR-36: no vendor document entered or re-dated in a locked month.
+create or replace function finance.vendor_doc_month_open() returns trigger
+language plpgsql as $$
+begin
+  if (tg_op = 'INSERT' or new."docDate" is distinct from old."docDate")
+     and finance.is_month_locked(new."entityId", new."docDate") then
+    raise exception 'finance: % is in a locked month; unlock it in Settings > Period lock first', new."docDate"
+      using errcode = 'P0007';
+  end if;
+  return new;
+end $$;
+drop trigger if exists vendor_doc_month_open on finance."VendorDocument";
+create trigger vendor_doc_month_open before insert or update on finance."VendorDocument"
+  for each row execute function finance.vendor_doc_month_open();
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$

@@ -15,11 +15,13 @@ const NEW = '__new__';
  * People who may edit settings can add a category or sub-category right here (D10); it is the
  * same as adding it on the Categories page and is audited the same way.
  */
-export function CategoryFields({ cats, value, onChange, compact }: {
+export function CategoryFields({ cats, value, onChange, compact, hideNature }: {
   cats: Category[];
   value: CategoryValue;
   onChange: (v: CategoryValue) => void;
   compact?: boolean;
+  /** Where the nature always follows the category (vendor bills), show it as text instead. */
+  hideNature?: boolean;
 }) {
   const { hasPermission } = useAuth();
   const canAdd = hasPermission('financeSettings', 'edit');
@@ -53,12 +55,16 @@ export function CategoryFields({ cats, value, onChange, compact }: {
             {canAdd && cat && <option value={NEW}>+ New sub-category in {cat.name}…</option>}
           </Select>
         </Field>
+        {hideNature ? (
+          <div className="text-sm self-end pb-2 text-gray-600">{defaultNature ? `Nature: ${NATURE_LABEL[defaultNature]}` : ''}</div>
+        ) : (
         <Field label="Nature" hint={defaultNature && !compact ? `Default for this category: ${NATURE_LABEL[defaultNature]}` : undefined}>
           <Select value={value.nature} disabled={!cat} onChange={(e) => onChange({ ...value, nature: e.target.value as Nature | '' })}>
             <option value="">{defaultNature ? `${NATURE_LABEL[defaultNature]} (default)` : '—'}</option>
             {(Object.keys(NATURE_LABEL) as Nature[]).filter((n) => n !== defaultNature).map((n) => <option key={n} value={n}>{NATURE_LABEL[n]}</option>)}
           </Select>
         </Field>
+        )}
       </div>
       {adding && (
         <QuickAdd

@@ -10,6 +10,7 @@ export const FINANCE_MODULES = {
     financeRules: 'Categorisation rules',
     financeVendors: 'Vendors',
     financePurchases: 'Purchase orders',
+    financeBills: 'Vendor bills',
     financeDocuments: 'Documents vault',
     financeUsers: 'Users and roles',
     financeAudit: 'Audit log',

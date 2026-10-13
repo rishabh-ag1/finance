@@ -106,6 +106,8 @@ model Company {
   fyStartMonth      Int       @default(4) @db.SmallInt
   /// 22 May 2026. Months of the first FY before this show as zero (Q12).
   incorporationDate DateTime? @db.Date
+  /// BR-10: advances without a tax invoice older than this many days go on the chase list.
+  taxInvoiceChaseDays Int     @default(15) @db.SmallInt
   email             String?
   phone             String?
   logoFileId        String?
@@ -412,6 +414,7 @@ model Vendor {
   updatedBy            String?
   bankAccounts         VendorBankAccount[]
   purchaseOrders       PurchaseOrder[]
+  documents            VendorDocument[]
 
   @@index([displayName])
   @@index([pan])
@@ -828,6 +831,7 @@ model PurchaseOrder {
   vendor               Vendor    @relation(fields: [vendorId], references: [id])
   lines                PoLine[]
   revisions            PoRevision[]
+  documents            VendorDocument[]
 
   @@index([vendorId])
   @@index([status])
@@ -878,5 +882,129 @@ model PoRevision {
   po         PurchaseOrder @relation(fields: [poId], references: [id])
 
   @@unique([poId, revisionNo])
+  @@schema("finance")
+}
+
+// ============================================================================
+// M05 Vendor documents (Phase 2): quotes, proformas, tax invoices, debit and credit notes
+// ============================================================================
+
+enum VendorDocType {
+  quote
+  proforma
+  tax_invoice
+  debit_note
+  credit_note
+
+  @@schema("finance")
+}
+
+/// Computed from the document type, payments and actions (Status Flows); never typed.
+enum VendorDocStatus {
+  awaiting_tax_invoice
+  received
+  approved
+  partially_paid
+  paid
+  disputed
+  replaced
+  cancelled
+
+  @@schema("finance")
+}
+
+model VendorDocument {
+  id                 String          @id @default(cuid())
+  entityId           String
+  docType            VendorDocType
+  vendorId           String
+  docNumber          String
+  /// BR-19: docNumber without spaces, upper case. Unique per vendor and FY (finance.sql).
+  docNumberKey       String
+  fyLabel            String
+  docDate            DateTime        @db.Date
+  receivedDate       DateTime?       @db.Date
+  poId               String?
+  /// F057: the quote or proforma this tax invoice replaces.
+  replacesDocumentId String?
+  /// Debit / credit notes: the invoice they adjust.
+  againstDocumentId  String?
+  placeOfSupplyState String          @db.Char(2)
+  gstMode            String
+  reverseCharge      Boolean         @default(false)
+  taxableValue       Decimal         @default(0) @db.Decimal(14, 2)
+  cgst               Decimal         @default(0) @db.Decimal(14, 2)
+  sgst               Decimal         @default(0) @db.Decimal(14, 2)
+  igst               Decimal         @default(0) @db.Decimal(14, 2)
+  /// Non-taxable fees on the vendor's document (BR-18), e.g. government fees.
+  otherCharges       Decimal         @default(0) @db.Decimal(14, 2)
+  roundOff           Decimal         @default(0) @db.Decimal(14, 2)
+  totalValue         Decimal         @default(0) @db.Decimal(14, 2)
+  /// Set when the GST typed from the vendor's copy differs from the computed split (F053).
+  taxMismatch        String?
+  tdsApplicable      Boolean         @default(false)
+  tdsSectionId       String?
+  tdsBase            Decimal         @default(0) @db.Decimal(14, 2)
+  tdsRate            Decimal         @default(0) @db.Decimal(5, 2)
+  tdsAmount          Decimal         @default(0) @db.Decimal(14, 2)
+  /// What the app suggested and why (BR-11, BR-12), kept next to what was used.
+  tdsSuggestion      Json?
+  tdsOverrideReason  String?
+  /// Filled by payments (M06): advances moved onto this document, payments, notes.
+  advancesApplied    Decimal         @default(0) @db.Decimal(14, 2)
+  paidAmount         Decimal         @default(0) @db.Decimal(14, 2)
+  notesAdjustment    Decimal         @default(0) @db.Decimal(14, 2)
+  netPayable         Decimal         @default(0) @db.Decimal(14, 2)
+  outstanding        Decimal         @default(0) @db.Decimal(14, 2)
+  categoryId         String?
+  subCategoryId      String?
+  nature             TxnNature?
+  paymentTermId      String?
+  dueDate            DateTime?       @db.Date
+  status             VendorDocStatus
+  statusReason       String?
+  approvedBy         String?
+  approvedAt         DateTime?       @db.Timestamptz(6)
+  itcEligible        Boolean         @default(true)
+  notes              String?
+  createdAt          DateTime        @default(now()) @db.Timestamptz(6)
+  createdBy          String?
+  updatedAt          DateTime        @updatedAt @db.Timestamptz(6)
+  updatedBy          String?
+  vendor             Vendor          @relation(fields: [vendorId], references: [id])
+  po                 PurchaseOrder?  @relation(fields: [poId], references: [id])
+  lines              VendorDocumentLine[]
+
+  @@index([vendorId])
+  @@index([poId])
+  @@index([status])
+  @@schema("finance")
+}
+
+model VendorDocumentLine {
+  id          String         @id @default(cuid())
+  docId       String
+  lineNo      Int
+  poLineId    String?
+  description String
+  hsnSac      String?
+  qty         Decimal        @db.Decimal(14, 3)
+  unit        String         @default("Nos")
+  rate        Decimal        @db.Decimal(14, 4)
+  discount    Decimal        @default(0) @db.Decimal(14, 2)
+  gstRate     Decimal        @db.Decimal(5, 2)
+  taxable     Decimal        @db.Decimal(14, 2)
+  cgst        Decimal        @db.Decimal(14, 2)
+  sgst        Decimal        @db.Decimal(14, 2)
+  igst        Decimal        @db.Decimal(14, 2)
+  lineTotal   Decimal        @db.Decimal(14, 2)
+  isArchived  Boolean        @default(false)
+  createdAt   DateTime       @default(now()) @db.Timestamptz(6)
+  createdBy   String?
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(6)
+  updatedBy   String?
+  doc         VendorDocument @relation(fields: [docId], references: [id])
+
+  @@index([docId])
   @@schema("finance")
 }

@@ -35,6 +35,7 @@ export async function companyView() {
         email: c.email,
         phone: c.phone,
         incorporationDate: dateText(c.incorporationDate),
+        taxInvoiceChaseDays: c.taxInvoiceChaseDays,
         fy: {
             startMonth: c.fyStartMonth,
             current: fyRange(today),
@@ -48,6 +49,7 @@ export type CompanyInput = {
     legalName: string; brandName?: string | null; cin?: string | null; tan?: string | null; gstin: string;
     udyamNo?: string | null; registeredAddress: string; email?: string | null; phone?: string | null;
     incorporationDate?: string | null;
+    taxInvoiceChaseDays?: number;
 };
 
 export async function updateCompany(ctx: AuditContext, input: CompanyInput) {
@@ -77,6 +79,7 @@ export async function updateCompany(ctx: AuditContext, input: CompanyInput) {
             email: input.email?.trim() || null,
             phone: input.phone?.trim() || null,
             incorporationDate: parseOptionalDate(input.incorporationDate, 'Incorporation date'),
+            ...(input.taxInvoiceChaseDays !== undefined ? { taxInvoiceChaseDays: input.taxInvoiceChaseDays } : {}),
         },
     }));
     return companyView();

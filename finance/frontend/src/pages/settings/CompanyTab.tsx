@@ -30,6 +30,7 @@ export function CompanyTab() {
           { label: 'Registered address', value: c.registeredAddress },
           { label: 'Documents sent from', value: c.email },
           { label: 'Incorporated', value: dateLabel(c.incorporationDate) },
+          { label: 'Chase tax invoices after', value: `${c.taxInvoiceChaseDays} days (BR-10)` },
         ]} />
       </Card>
 
@@ -58,8 +59,9 @@ function EditCompany({ company, onClose }: { company: Company; onClose: () => vo
     legalName: company.legalName, brandName: company.brandName ?? '', gstin: company.gstin, cin: company.cin ?? '',
     tan: company.tan ?? '', udyamNo: company.udyamNo ?? '', registeredAddress: company.registeredAddress,
     email: company.email ?? '', phone: company.phone ?? '', incorporationDate: company.incorporationDate ?? '',
+    taxInvoiceChaseDays: String(company.taxInvoiceChaseDays),
   });
-  const save = useSettingsMutation<typeof form>('company', 'put');
+  const save = useSettingsMutation<Omit<typeof form, 'taxInvoiceChaseDays'> & { taxInvoiceChaseDays: number }>('company', 'put');
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 
   return (
@@ -68,7 +70,7 @@ function EditCompany({ company, onClose }: { company: Company; onClose: () => vo
       onClose={onClose}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button disabled={save.isPending} onClick={() => save.mutate({ body: form }, { onSuccess: onClose })}>{save.isPending ? 'Saving…' : 'Save'}</Button>
+        <Button disabled={save.isPending} onClick={() => save.mutate({ body: { ...form, taxInvoiceChaseDays: Number(form.taxInvoiceChaseDays) || 15 } }, { onSuccess: onClose })}>{save.isPending ? 'Saving…' : 'Save'}</Button>
       </>}
     >
       <ErrorNote>{save.isError && apiErrorMessage(save.error, 'Could not save')}</ErrorNote>
@@ -80,6 +82,7 @@ function EditCompany({ company, onClose }: { company: Company; onClose: () => vo
         <Field label="TAN"><TextInput className="uppercase" value={form.tan} onChange={set('tan')} /></Field>
         <Field label="Udyam number"><TextInput value={form.udyamNo} onChange={set('udyamNo')} /></Field>
         <Field label="Incorporated on"><TextInput type="date" value={form.incorporationDate} onChange={set('incorporationDate')} /></Field>
+        <Field label="Chase a missing tax invoice after (days)" hint="Quotes and proformas older than this go on the chase list (BR-10)."><TextInput inputMode="numeric" value={form.taxInvoiceChaseDays} onChange={set('taxInvoiceChaseDays')} /></Field>
         <Field label="Email for documents"><TextInput type="email" value={form.email} onChange={set('email')} /></Field>
         <Field label="Phone"><TextInput value={form.phone} onChange={set('phone')} /></Field>
       </div>

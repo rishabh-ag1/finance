@@ -81,7 +81,7 @@
 
 - **Module:** M05
 - **Trigger:** Daily
-- **Logic:** Sum of advances not yet adjusted against a tax invoice. Any advance older than N days (default 15) appears in the chase list. ITC on the GST portion cannot be claimed until the tax invoice is in hand.
+- **Logic:** Sum of advances not yet adjusted against a tax invoice. Any advance older than N days (default 15, Settings > Company) appears in the chase list; the list also shows every quote and proforma still awaiting its tax invoice. ITC on the GST portion cannot be claimed until the tax invoice is in hand.
 - **Worked example:** Current figure from AP Dashboard: ₹3,85,508.
 - **Confidence:** High
 
@@ -89,7 +89,7 @@
 
 - **Module:** M07
 - **Trigger:** Bill saved or payment made, whichever first
-- **Logic:** TDS is deducted at the earlier of credit (bill booked) or payment (including advance). Base = taxable value excluding GST when GST is shown separately on the invoice; on an advance against a quote without GST break-up, base = advance amount unless the GST portion is identifiable. When the tax invoice later arrives, TDS already deducted on the advance is netted so it is not deducted twice.
+- **Logic:** TDS is deducted at the earlier of credit (bill booked) or payment (including advance). Base = taxable value excluding GST when GST is shown separately on the invoice; on an advance against a quote without GST break-up, base = advance amount unless the GST portion is identifiable. When the tax invoice later arrives, TDS already deducted on the advance is netted so it is not deducted twice. In the app: a tax invoice gets its TDS when entered; a quote or proforma gets none until its advance is paid (M06). The app suggests the TDS and keeps the suggestion with its reasoning; a different figure needs a reason.
 - **Worked example:** Saiffi bill 040: taxable ₹9,80,000, GST ₹1,76,400, TDS 2% on ₹9,80,000 = ₹19,600. Net paid ₹11,36,800.
 - **Confidence:** High on GST exclusion. [Verify] advance treatment with CA.
 
@@ -98,7 +98,7 @@
 - **Module:** M07
 - **Trigger:** Bill or payment for a vendor with a TDS section
 - **Logic:** Rate = section rate for deductee type. Deductee type from PAN 4th character: P (individual) or H (HUF) use individual rate; C, F, T, A, B, etc. use 'others' rate. No PAN on file: higher no-PAN rate. Lower deduction certificate overrides rate up to its limit and validity. Thresholds: deduct only if the single payment or FY aggregate crosses the section's thresholds; once the aggregate threshold is crossed, deduct on the full FY amount including earlier payments. All rates and thresholds come from the TDS Section master.
-- **Worked example:** Saiffi Industries GSTIN 06ANJPA3053F1ZI gives PAN ANJPA3053F, 4th character P = individual (proprietorship). Contract work rate for individuals has been 1%, but 2% (₹19,600) was deducted. Makenica (₹37,401, no TDS) may have needed TDS if it is contract work rather than a purchase of goods.
+- **Worked example:** Saiffi Industries GSTIN 06ANJPA3053F1ZI gives PAN ANJPA3053F, 4th character P = individual (proprietorship). Contract work rate for individuals has been 1%, but 2% (₹19,600) was deducted. Makenica (₹37,401, no TDS) may have needed TDS if it is contract work rather than a purchase of goods. Threshold catch-up: a company vendor billed ₹85,000 under 194C this FY without TDS, then ₹20,000: FY total ₹1,05,000 crosses ₹1,00,000, so TDS is 2% of ₹1,05,000 = ₹2,100. Lower deduction certificate: its rate applies within its dates and while the FY total stays within its limit.
 - **Confidence:** [Verify] Rates, thresholds and new section numbers under Income-tax Act 2025. Saiffi 1% vs 2% and Makenica: confirm with CA.
 
 ## BR-13 - TDS deposit due date
@@ -145,7 +145,7 @@
 
 - **Module:** M05
 - **Trigger:** Bill saved
-- **Logic:** Net payable = total invoice value (taxable + GST + other non-taxable fees) - TDS - advances adjusted. Outstanding = net payable - payments allocated.
+- **Logic:** Net payable = total invoice value (taxable + GST + other non-taxable fees) - TDS - advances adjusted. Outstanding = net payable - payments allocated + vendor debit notes - vendor credit notes against the bill.
 - **Worked example:** VideAim PI0037: ₹17,000 + GST ₹3,060 + fees ₹1,000 = ₹21,060; TDS 10% of ₹17,000 = ₹1,700; net ₹19,360; paid ₹19,360; outstanding 0.
 - **Confidence:** High
 
@@ -153,8 +153,8 @@
 
 - **Module:** M05
 - **Trigger:** Bill saved
-- **Logic:** Block if the same vendor + same document number + same FY already exists (normalise case and spaces). Warn if same vendor + same amount within 7 days.
-- **Worked example:** -
+- **Logic:** Block if the same vendor + same document number + same FY already exists (normalise case and spaces). Warn if same vendor + same amount within 7 days. A cancelled entry does not block entering the number again.
+- **Worked example:** Vendor bill 'PI 0037' is refused when 'pi0037' from the same vendor is already entered for FY 26-27.
 - **Confidence:** High
 
 ## BR-20 - GST split
@@ -186,7 +186,7 @@
 - **Module:** M05/M09
 - **Trigger:** Document saved
 - **Logic:** Due date = document date + payment term days (from vendor/customer default, overridable). Advance terms: due date = document date.
-- **Worked example:** -
+- **Worked example:** Bill dated 24 Jul 2026 on Net 30 is due 23 Aug 2026; on Advance or On receipt it is due 24 Jul 2026.
 - **Confidence:** High
 
 ## BR-24 - Ageing buckets

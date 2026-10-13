@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
 import api from '../../api';
 import { Button, Card, ErrorNote, Field, MoneyInput, PageHeader, Select, TextInput } from '../../components/ui/kit';
-import { GST_STATES, stateLabel } from '../../lib/gstStates';
+import { GST_STATE_LIST, stateLabel } from '../../lib/gstStates';
 import { formatINR } from '../../lib/money';
 import { apiErrorMessage } from '../../lib/utils';
 import { useSettings, type GstRate, type PaymentTerm } from '../settings/api';
@@ -149,7 +149,7 @@ function PoForm({ mode, id, existing, initial }: { mode: 'new' | 'edit' | 'amend
             <Field label="Delivery state">
               <Select value={f.placeOfSupplyState} onChange={(e) => set('placeOfSupplyState', e.target.value)}>
                 <option value="">Choose</option>
-                {Object.entries(GST_STATES).map(([c, n]) => <option key={c} value={c}>{n} ({c})</option>)}
+                {GST_STATE_LIST.map(([c, n]) => <option key={c} value={c}>{n} ({c})</option>)}
               </Select>
             </Field>
           </>
