@@ -51,6 +51,8 @@ export function HomePage() {
   if (isLoading || !h) return <p className="text-sm text-gray-500">Loading…</p>;
 
   const lastMonth = h.lastThreeMonths[h.lastThreeMonths.length - 1];
+  // With no statement imported, burn is zero and runway would wrongly read 'Cash positive'.
+  const noData = h.cash.accounts.every((a) => !a.lastTxnDate);
   const max = Math.max(1, ...h.months.flatMap((m) => [Number(m.grossBurn), Number(m.operatingIncome), Number(m.capex)]));
   const actions = [
     h.actions.review > 0 && { text: `${h.actions.review} bank row${h.actions.review === 1 ? '' : 's'} to review`, to: '/review' },
@@ -69,9 +71,9 @@ export function HomePage() {
         <Kpi label="Cash in business accounts" value={short(h.cash.total)} hint={h.cashCredit ? `Liquidity with CC headroom ${short(h.cashCredit.liquidity)}` : `${h.cash.accounts.length} account(s)`} />
         <Kpi
           label="Runway"
-          value={h.runway.kind === 'cash_positive' ? 'Cash positive' : `${h.runway.months} months`}
-          hint={`Avg net burn ${short(h.runway.averageNetBurn)}/month (last 3 months)`}
-          tone={h.runway.kind === 'cash_positive' ? 'good' : Number(h.runway.months) < 6 ? 'bad' : undefined}
+          value={noData ? '—' : h.runway.kind === 'cash_positive' ? 'Cash positive' : `${h.runway.months} months`}
+          hint={noData ? 'Import a statement first' : `Avg net burn ${short(h.runway.averageNetBurn)}/month (last 3 months)`}
+          tone={noData ? undefined : h.runway.kind === 'cash_positive' ? 'good' : Number(h.runway.months) < 6 ? 'bad' : undefined}
         />
         <Kpi label={`Net burn ${monthLabel(lastMonth.month)}`} value={short(lastMonth.netBurn)} hint={`Gross ${short(lastMonth.grossBurn)} · income ${short(lastMonth.operatingIncome)}`} />
         <Kpi label="Capex this FY" value={short(h.capex.fy)} hint="Tooling, equipment, patents: not in burn" />
