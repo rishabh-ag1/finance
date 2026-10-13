@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../src/config/database';
 import { createApp } from '../src/app';
+import { readCategoryMaster } from '../src/lib/categoryMaster';
 import { hasDb } from './setup/db';
 import { loggedInFounder, seedOnce } from './setup/fixtures';
 
@@ -15,7 +16,11 @@ describe.skipIf(!hasDb)('M1 settings and masters', () => {
         await seedOnce();
         expect(await prisma.company.count()).toBe(1);
         expect(await prisma.bankAccount.count({ where: { bankName: 'IDFC FIRST Bank' } })).toBe(1);
-        expect(await prisma.subCategory.count()).toBe(90);
+        const master = readCategoryMaster();
+        const subs = await prisma.subCategory.findMany({ include: { category: true } });
+        for (const row of master) {
+            expect(subs.filter((s) => s.category.name === row.category && s.name === row.subCategory)).toHaveLength(1);
+        }
         expect(await prisma.paymentTerm.count()).toBe(7);
         expect(await prisma.approvalRule.count({ where: { isEnabled: true } })).toBe(0);
     });
@@ -75,19 +80,20 @@ describe.skipIf(!hasDb)('M1 settings and masters', () => {
     it('lets a series number go up but never down (BR-30)', async () => {
         const { agent } = await loggedInFounder(app);
         const po = (await agent.get('/api/settings/number-series')).body.data.find((s: { docType: string }) => s.docType === 'purchase_order');
-        expect(po.nextPreview).toMatch(/^ELPL\/PO\/\d{2}-\d{2}\/001$/);
+        const n: number = po.nextNumber;
+        expect(po.nextPreview).toBe(`ELPL/PO/${po.fyLabel}/${String(n).padStart(3, '0')}`);
 
-        const up = await agent.put(`/api/settings/number-series/${po.id}`).send({ ...po, nextNumber: 2 });
+        const up = await agent.put(`/api/settings/number-series/${po.id}`).send({ ...po, nextNumber: n + 1 });
         expect(up.status).toBe(200);
-        expect(up.body.data.nextPreview).toMatch(/\/002$/);
+        expect(up.body.data.nextPreview).toBe(`ELPL/PO/${po.fyLabel}/${String(n + 1).padStart(3, '0')}`);
 
-        const down = await agent.put(`/api/settings/number-series/${po.id}`).send({ ...po, nextNumber: 1 });
+        const down = await agent.put(`/api/settings/number-series/${po.id}`).send({ ...po, nextNumber: n });
         expect(down.status).toBe(400);
 
         // The database refuses it too, whatever the code path.
         await expect(prisma.$transaction(async (tx) => {
             await tx.$queryRaw`select set_config('finance.user_id', 'tester', true)`;
-            await tx.numberSeries.update({ where: { id: po.id }, data: { nextNumber: 1 } });
+            await tx.numberSeries.update({ where: { id: po.id }, data: { nextNumber: n } });
         })).rejects.toThrow(/cannot go down/);
     });
 

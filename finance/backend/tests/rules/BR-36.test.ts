@@ -53,7 +53,7 @@ describe.skipIf(!hasDb)('BR-36 period lock', () => {
         const ok = await agent.post('/api/settings/period-locks/unlock').send({ month: '2026-08-01', reason: 'Late Razorpay fee entry' });
         expect(ok.status).toBe(200);
         const lock = await prisma.periodLock.findFirstOrThrow({ where: { month: new Date('2026-08-01T00:00:00Z') } });
-        const audit = await prisma.auditLog.findFirstOrThrow({ where: { recordId: lock.id, action: 'unlock' } });
+        const audit = await prisma.auditLog.findFirstOrThrow({ where: { recordId: lock.id, action: 'unlock', userId: user.id } });
         expect(audit).toMatchObject({ userId: user.id, reason: 'Late Razorpay fee entry', field: 'isLocked' });
     });
 

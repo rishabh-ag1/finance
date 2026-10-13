@@ -10,8 +10,9 @@ declare module 'vitest' {
 }
 
 /**
- * Before the test run: rebuild the test database from prisma/schema.prisma and
- * prisma/sql/finance.sql, exactly as `npm run db:sync` does for the real one.
+ * Before the test run: bring the test database up to prisma/schema.prisma and
+ * prisma/sql/finance.sql, exactly as `npm run db:sync` does for the real one. It is never wiped
+ * (the database refuses deletes anyway), so every test makes its own data and checks relative to it.
  * When DATABASE_URL_TEST is missing or the database can't be reached, DB tests are skipped
  * (with a loud warning) and the pure rule tests still run.
  */
@@ -29,7 +30,9 @@ export default function setup(project: TestProject): void {
     const cwd = path.resolve(__dirname, '../..');
     const env = { ...process.env, DATABASE_URL: url };
     try {
-        execSync('npx prisma db push --force-reset --skip-generate', { cwd, env, stdio: 'pipe' });
+        // Same non-destructive sync as `npm run db:sync`; the tests tolerate data from earlier runs.
+        // If a schema change ever needs data loss, drop and recreate the _test database by hand.
+        execSync('npx prisma db push --skip-generate', { cwd, env, stdio: 'pipe' });
         execSync('npx prisma db execute --file prisma/sql/finance.sql --schema prisma/schema.prisma', { cwd, env, stdio: 'pipe' });
         project.provide('dbReady', true);
     } catch (error) {

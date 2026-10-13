@@ -25,7 +25,7 @@ export function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-4">
       <PageHeader title="Settings" subtitle="Company, bank accounts, tax masters, numbering, terms and month locks. Every change is in the audit log." />
-      <nav className="flex gap-1 overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 border-b border-gray-200">
+      <nav className="flex gap-1 overflow-x-auto overflow-y-hidden -mx-3 px-3 sm:mx-0 sm:px-0 border-b border-gray-200">
         {TABS.map((t) => (
           <button
             key={t.key}

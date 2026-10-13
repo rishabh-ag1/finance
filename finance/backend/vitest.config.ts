@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // DB tests run against DATABASE_URL_TEST only (never the dev database). Its name must end in
-// "_test" because tests/setup/global-db.ts resets it.
+// "_test" so test data can never land in the real database.
 const testDb = process.env.DATABASE_URL_TEST ?? '';
 
 export default defineConfig({

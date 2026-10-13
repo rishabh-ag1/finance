@@ -49,7 +49,8 @@ describe.skipIf(!hasDb)('BR-43 audit trail', () => {
         await withAudit({ userId: user.id }, (tx) => tx.user.update({ where: { id: user.id }, data: { passwordHash } }));
         const row = await prisma.auditLog.findFirstOrThrow({ where: { recordId: user.id, field: 'passwordHash' } });
         expect(row.newValue).toBe('***');
-        expect(JSON.stringify(await prisma.auditLog.findMany({ where: { recordId: user.id } }))).not.toContain(passwordHash);
+        const values = await prisma.auditLog.findMany({ where: { recordId: user.id }, select: { oldValue: true, newValue: true } });
+        expect(JSON.stringify(values)).not.toContain(passwordHash);
     });
 
     it('refuses a write that does not say who is acting', async () => {
