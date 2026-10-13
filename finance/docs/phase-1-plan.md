@@ -13,7 +13,7 @@ Modules: M01 Settings & Masters, M02 Bank & Cash Ledger, M03 Vendors, M11 Produc
 5. **Ledger and review** (F014-F021): ledger list with filters and running totals, review queue, auto-categorisation (BR-05), rules manager (F017, P1), split (BR-07), own-account transfer pairing (BR-06), notes and attachments.
 6. **Vendors** (F030-F038): GSTIN lookup, PAN derivation and deductee type (BR-12, BR-15), MSME, bank details with change control (BR-16), documents checklist, vendor 360 (payments only until Phase 2).
 7. **Documents vault** (F160-F161): Drive upload and folder structure.
-8. **Migration** (F023): import the Master Ledger history with categories re-mapped (capital and Mesa loan as Financing In, tooling as Capex, OPT/CBDT as Tax Payment).
+8. ~~**Migration** (F023)~~: dropped (D10). The old Master Ledger is not imported; the founders categorise and describe transactions in the app.
 9. **Home dashboard, Phase 1 slice** (F130): cash, gross/net burn, runway (BR-37), review-queue count, category x month pivot (F131).
 
 ## Acceptance checks

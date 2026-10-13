@@ -10,7 +10,7 @@ const MILESTONES = [
   { id: 'M3', title: 'Ledger and review queue', done: true },
   { id: 'M4', title: 'Vendors', done: true },
   { id: 'M5', title: 'Documents vault', done: true },
-  { id: 'M6', title: 'Master Ledger migration', done: false },
+  { id: 'M6', title: 'Master Ledger migration: dropped, you categorise in the app', done: true },
   { id: 'M7', title: 'Home dashboard', done: false },
 ];
 

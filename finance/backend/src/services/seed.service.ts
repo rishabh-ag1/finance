@@ -168,8 +168,8 @@ export const DEFAULT_RULES: {
     name: string; priority: number; matchField: string; operator: string; matchValue: string; direction: 'debit' | 'credit' | null;
     category: string; sub: string; partyType: 'vendor' | 'founder' | 'lender' | 'govt' | 'other'; description?: string;
 }[] = [
-    { name: 'OPT/CBDT', priority: 10, matchField: 'narration', operator: 'starts_with', matchValue: 'OPT/CBDT', direction: 'debit', category: 'Taxes', sub: 'TDS Deposit', partyType: 'govt', description: 'TDS deposit' },
-    { name: 'Mesa loan (Neos Kosmos)', priority: 20, matchField: 'counterparty_name', operator: 'contains', matchValue: 'NEOS KOSMOS', direction: 'credit', category: 'Financing', sub: 'Loan Received', partyType: 'lender', description: 'Loan from Mesa School of Business (Neos Kosmos)' },
+    { name: 'OPT/CBDT', priority: 10, matchField: 'narration', operator: 'starts_with', matchValue: 'OPT/CBDT', direction: 'debit', category: 'Taxes', sub: 'TDS Deposit', partyType: 'govt' },
+    { name: 'Mesa loan (Neos Kosmos)', priority: 20, matchField: 'counterparty_name', operator: 'contains', matchValue: 'NEOS KOSMOS', direction: 'credit', category: 'Financing', sub: 'Loan Received', partyType: 'lender' },
     { name: 'Newera Living', priority: 30, matchField: 'counterparty_name', operator: 'contains', matchValue: 'NEWERA LIVING', direction: null, category: 'Related Party', sub: 'Newera Living Transfer', partyType: 'other' },
     { name: 'Founder funds - Rishabh', priority: 40, matchField: 'counterparty_name', operator: 'contains', matchValue: 'RISHABH', direction: 'credit', category: 'Founder Funds', sub: 'Investment - Rishabh', partyType: 'founder' },
     { name: 'Founder funds - Arnav', priority: 41, matchField: 'counterparty_name', operator: 'contains', matchValue: 'ARNAV', direction: 'credit', category: 'Founder Funds', sub: 'Investment - Arnav', partyType: 'founder' },

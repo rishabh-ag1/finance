@@ -70,6 +70,20 @@ When a founder's answer in `docs/open-questions.md` changes behaviour, apply it 
 - Sending address for documents: finance@blocinsects.com
 - **Never** print Newera Living's name, GSTIN (29AAYFN4098H1ZB) or bank account on any Entelechy document. The old proforma sheet still does; do not copy those values.
 
+## Temporary setups to replace (when moving to Google Cloud / the Bloc server)
+
+Recorded as D11-D13 in `docs/spec.md` README (and the Google Sheet). Check this list whenever infrastructure changes:
+
+1. **File storage is local** (`FILE_STORAGE=local`, files in `backend/.files`). Switch to Drive: Google Cloud service account, a folder in a Shared Drive shared with it as Content manager, then `FILE_STORAGE=drive`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `DRIVE_ROOT_FOLDER_ID`, and a one-off script to move the existing local files into Drive and update `Attachment.storage` / `storageKey`. The Drive driver (`backend/src/storage/drive.ts`) has not run against real credentials yet: test it first.
+2. **The Google Sheet PRD is updated by hand** from the repo (no service account for `scripts/sync-spec-to-sheet.ts` yet). Once the service account exists: share the sheet with it as Editor and add GitHub secrets `SPEC_SHEET_ID` and `GOOGLE_SERVICE_ACCOUNT_JSON`; the workflow then syncs on every merge to `main`.
+3. **GSTIN Fetch is off** until `GSTINAPI_KEY` (the CRM's gstinapi.in key) is set in `backend/.env`.
+4. **Development database** is Postgres 17 on the founder's PC, port 5433, started outside the Windows service. Production target is Bloc's EC2 Postgres (`bloccrm`, schema `finance`).
+5. **No real bank data yet**: wait for one real IDFC download (Q30) before the first real import; imported rows cannot be deleted.
+
+## No migration of old data
+
+The old Financials Master history is not imported (F023 dropped, D10). Never add code that carries over old descriptions, categories or notes. The founders categorise in the app and add categories / sub-categories there (Categories page or "+ New" in the categorise form). Default rules set a category only, never a description.
+
 ## Open blocker before invoicing goes live
 
 Confirm with the founders and the CA which entity is invoicing customers today (the current proforma sheet still issues under Newera Living as of Aug 2026). Build the invoice engine, but do not seed a live invoice series or issue real invoices until this is confirmed.
