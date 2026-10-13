@@ -5,7 +5,7 @@ import { dateText, parseDate } from '../lib/dates';
 import { UserError } from '../lib/http';
 import { Decimal, moneyText, parseMoney } from '../lib/money';
 import { resolveNature } from '../lib/nature';
-import { suggest, type LastUsed, type Rule, type RuleDirection, type RuleField, type RuleOperator } from './rules';
+import { suggest, type LastUsed, type Rule, type RuleDirection, type RuleField, type RuleOperator, type Suggestion } from './rules';
 import { splitProblem } from './split';
 import { findTransferPartner } from './transfers';
 import { txnView } from './import.service';
@@ -53,12 +53,23 @@ export async function autoCategorise(tx: Tx, txnIds: string[]): Promise<number> 
     }
   }
 
+  // Step 2: the counterparty is a known vendor (by one of its bank names).
+  const vendors = (await tx.vendor.findMany({ where: { isArchived: false, NOT: { bankNames: { isEmpty: true } } } }))
+    .flatMap((v) => v.bankNames.map((n) => ({ vendor: v, name: n.toUpperCase() })))
+    .sort((a, b) => b.name.length - a.name.length); // the longest (most specific) name wins
+  const vendorFor = (cp: string | null) => (cp ? vendors.find((x) => cp.toUpperCase().includes(x.name))?.vendor ?? null : null);
+
   let suggested = 0;
   for (const row of rows) {
-    const s = suggest(rules, row, (cp) => lastUsed.get(cp) ?? null);
-    if (!s) continue;
-    const category = categories.get(s.categoryId);
-    if (!category) continue;
+    const vendor = vendorFor(row.counterpartyName);
+    const s: Suggestion | null = vendor?.defaultCategoryId
+      ? { categoryId: vendor.defaultCategoryId, subCategoryId: vendor.defaultSubCategoryId, nature: null, partyType: 'vendor', description: null, reason: `Vendor: ${vendor.displayName}` }
+      : suggest(rules, row, (cp) => lastUsed.get(cp) ?? null);
+    const category = s ? categories.get(s.categoryId) : undefined;
+    if (!s || !category) {
+      if (vendor) await tx.bankTxn.update({ where: { id: row.id }, data: { partyType: 'vendor', partyId: vendor.id } });
+      continue;
+    }
     const sub = s.subCategoryId ? subs.get(s.subCategoryId) : null;
     const nature = s.nature ?? resolveNature(category, sub ?? null);
     await tx.bankTxn.update({
@@ -67,7 +78,8 @@ export async function autoCategorise(tx: Tx, txnIds: string[]): Promise<number> 
         categoryId: category.id,
         subCategoryId: sub?.id ?? null,
         nature,
-        partyType: s.partyType,
+        partyType: vendor ? 'vendor' : s.partyType,
+        partyId: vendor?.id ?? null,
         description: row.description ?? s.description,
         relatedPartyType: nature === 'related_party' ? 'undecided' : null,
         status: 'suggested',

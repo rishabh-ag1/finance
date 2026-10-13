@@ -14,6 +14,8 @@ import { BatchPage } from './pages/bank/BatchPage';
 import { LedgerPage } from './pages/bank/LedgerPage';
 import { ReviewPage } from './pages/bank/ReviewPage';
 import { RulesPage } from './pages/bank/RulesPage';
+import { VendorsPage } from './pages/vendors/VendorsPage';
+import { VendorPage } from './pages/vendors/VendorPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +46,10 @@ function App() {
                   <Route path="/imports/:id" element={<BatchPage />} />
                   <Route path="/ledger" element={<LedgerPage />} />
                   <Route path="/review" element={<ReviewPage />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeVendors" requiredAction="view" />}>
+                  <Route path="/vendors" element={<VendorsPage />} />
+                  <Route path="/vendors/:id" element={<VendorPage />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeRules" requiredAction="view" />}>
                   <Route path="/rules" element={<RulesPage />} />

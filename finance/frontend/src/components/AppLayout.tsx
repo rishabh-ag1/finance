@@ -27,7 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/ledger', label: 'Bank ledger', icon: Landmark, module: 'financeBank' },
   { to: '/review', label: 'Review queue', icon: ListChecks, module: 'financeBank', badge: 'review' },
   { to: '/rules', label: 'Rules', icon: Wand2, module: 'financeRules' },
-  { to: '/vendors', label: 'Vendors', icon: Truck, module: 'financeVendors', soon: true },
+  { to: '/vendors', label: 'Vendors', icon: Truck, module: 'financeVendors' },
   { to: '/documents', label: 'Documents', icon: FileText, module: 'financeDocuments', soon: true },
   { to: '/categories', label: 'Categories', icon: Tags, module: 'financeSettings' },
   { to: '/settings', label: 'Settings', icon: Settings, module: 'financeSettings' },

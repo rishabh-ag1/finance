@@ -329,6 +329,150 @@ model TxnSplit {
   @@schema("finance")
 }
 
+// ---------- Vendors (M03) ----------
+
+enum VendorType {
+  goods
+  services
+  both
+
+  @@schema("finance")
+}
+
+enum DeducteeType {
+  individual
+  huf
+  company
+  firm
+  others
+  unknown
+
+  @@schema("finance")
+}
+
+enum MsmeType {
+  micro
+  small
+  medium
+  none
+
+  @@schema("finance")
+}
+
+enum VendorStatus {
+  draft
+  pending_review
+  active
+  blocked
+
+  @@schema("finance")
+}
+
+/// F030-F038. PAN, state and deductee type always come from the GSTIN / PAN (BR-12, BR-15).
+model Vendor {
+  id                   String       @id @default(cuid())
+  entityId             String
+  displayName          String
+  legalName            String?
+  tradeName            String?
+  vendorType           VendorType
+  gstRegistered        Boolean      @default(false)
+  gstin                String?
+  pan                  String?
+  deducteeType         DeducteeType @default(unknown)
+  addressLine1         String?
+  addressLine2         String?
+  city                 String?
+  state                String?
+  stateCode            String?      @db.Char(2)
+  pincode              String?      @db.Char(6)
+  contactName          String?
+  phone                String?
+  email                String?
+  defaultTdsSectionId  String?
+  ldcNumber            String?
+  ldcRate              Decimal?     @db.Decimal(5, 2)
+  ldcValidFrom         DateTime?    @db.Date
+  ldcValidTo           DateTime?    @db.Date
+  ldcLimit             Decimal?     @db.Decimal(14, 2)
+  msmeType             MsmeType     @default(none)
+  udyamNo              String?
+  defaultCategoryId    String?
+  defaultSubCategoryId String?
+  paymentTermId        String?
+  status               VendorStatus @default(draft)
+  statusReason         String?
+  /// Names this vendor appears under in bank narrations (BR-05 step 2), e.g. "SAIFFI INDUSTRIES".
+  bankNames            String[]     @default([])
+  notes                String?
+  isArchived           Boolean      @default(false)
+  createdAt            DateTime     @default(now()) @db.Timestamptz(6)
+  createdBy            String?
+  updatedAt            DateTime     @updatedAt @db.Timestamptz(6)
+  updatedBy            String?
+  bankAccounts         VendorBankAccount[]
+
+  @@index([displayName])
+  @@index([pan])
+  @@schema("finance")
+}
+
+enum VendorBankStatus {
+  pending
+  approved
+  rejected
+  superseded
+
+  @@schema("finance")
+}
+
+/// F035, BR-16. Every change is a new row: on an active vendor it waits for another founder's
+/// approval; the old details stay as history (superseded).
+model VendorBankAccount {
+  id             String           @id @default(cuid())
+  vendorId       String
+  accountName    String
+  accountNumber  String
+  ifsc           String
+  bankName       String?
+  branch         String?
+  status         VendorBankStatus @default(pending)
+  requestedBy    String
+  requestedAt    DateTime         @default(now()) @db.Timestamptz(6)
+  decidedBy      String?
+  decidedAt      DateTime?        @db.Timestamptz(6)
+  decisionNote   String?
+  validFrom      DateTime?        @db.Timestamptz(6)
+  validTo        DateTime?        @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  createdBy      String?
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+  updatedBy      String?
+  vendor         Vendor           @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId, status])
+  @@schema("finance")
+}
+
+/// Cache of gstinapi.in lookups (I11), so the 100 free lookups a month are not spent twice.
+model GstinLookup {
+  id         String   @id @default(cuid())
+  gstin      String   @unique
+  status     String
+  legalName  String?
+  tradeName  String?
+  address    String?
+  stateCode  String?
+  pincode    String?
+  fetchedAt  DateTime @default(now()) @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  createdBy  String?
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy  String?
+
+  @@schema("finance")
+}
+
 /// BR-05 step 3, F017. Keyword rules applied in priority order (lowest number first).
 model CategorizationRule {
   id               String      @id @default(cuid())

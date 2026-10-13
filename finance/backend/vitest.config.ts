@@ -13,6 +13,8 @@ export default defineConfig({
         globalSetup: ['tests/setup/global-db.ts'],
         fileParallelism: false,
         testTimeout: 20000,
+        // Setup hooks seed and import the fixture into a test database that grows run after run.
+        hookTimeout: 60000,
         env: {
             DATABASE_URL: testDb,
             JWT_SECRET: 'test-only-secret-not-used-anywhere-else',

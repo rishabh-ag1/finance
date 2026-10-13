@@ -7,6 +7,7 @@ import { requireAuth } from './middleware/auth.middleware';
 import settingsRoutes from './routes/settings.routes';
 import categoryRoutes from './routes/category.routes';
 import bankRoutes from './routes/bank.routes';
+import vendorRoutes from './routes/vendor.routes';
 import { DeleteRefusedError, refuseDelete } from './lib/audit';
 import { UserError } from './lib/http';
 
@@ -35,6 +36,7 @@ export function createApp() {
     app.use('/api/settings', settingsRoutes);
     app.use('/api/categories', categoryRoutes);
     app.use('/api/bank', bankRoutes);
+    app.use('/api/vendors', vendorRoutes);
 
     // No hard deletes anywhere (BR-43, A9): every DELETE is refused and leaves an audit row.
     app.delete('/api/:resource/:id', async (req: Request, res: Response, next: NextFunction) => {

@@ -4,7 +4,7 @@ import type { Decimal } from '../lib/money';
 /**
  * BR-05 Auto-categorisation - the pure part. Order:
  *  1) expected item (approved payment, loan EMI, TDS challan) - from Phase 2, none yet
- *  2) counterparty mapped to a vendor/customer default category - vendors arrive in M4
+ *  2) counterparty matches a vendor bank name: link the vendor, use its default category
  *  3) keyword rules in priority order (F017)
  *  4) category last used for this counterparty
  *  5) Review

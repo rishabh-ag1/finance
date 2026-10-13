@@ -226,6 +226,31 @@ drop trigger if exists txn_split_month_open on finance."TxnSplit";
 create trigger txn_split_month_open before insert or update on finance."TxnSplit"
   for each row execute function finance.txn_split_month_open();
 
+-- ---------------------------------------------------------------------------
+-- Vendors (M03)
+-- ---------------------------------------------------------------------------
+-- BR-15: GSTIN shape, PAN shape, PAN = GSTIN characters 3-12, state code = GSTIN characters 1-2.
+alter table finance."Vendor" drop constraint if exists vendor_tax_ids;
+alter table finance."Vendor" add constraint vendor_tax_ids check (
+  ("gstin" is null or "gstin" ~ '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$')
+  and ("pan" is null or "pan" ~ '^[A-Z]{5}[0-9]{4}[A-Z]$')
+  and ("gstin" is null or (substring("gstin" from 3 for 10) = "pan" and substring("gstin" from 1 for 2) = "stateCode"))
+  and ("gstRegistered" = ("gstin" is not null))
+);
+-- One vendor per GSTIN (prisma db push drops indexes it does not know; db:sync re-creates them).
+create unique index if not exists vendor_gstin_uq on finance."Vendor" ("gstin") where "gstin" is not null and not "isArchived";
+
+alter table finance."VendorBankAccount" drop constraint if exists vendor_bank_ifsc;
+alter table finance."VendorBankAccount" add constraint vendor_bank_ifsc check ("ifsc" ~ '^[A-Z]{4}0[A-Z0-9]{6}$');
+-- BR-16: at most one approved (current) bank account per vendor.
+create unique index if not exists vendor_bank_one_current on finance."VendorBankAccount" ("vendorId") where "status" = 'approved';
+-- BR-16: a decision is recorded with who and when; an approval never by the person who asked
+-- for the change, except the first account of a vendor that is not active yet.
+alter table finance."VendorBankAccount" drop constraint if exists vendor_bank_decision;
+alter table finance."VendorBankAccount" add constraint vendor_bank_decision check (
+  ("status" = 'pending') = ("decidedBy" is null)
+);
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$
