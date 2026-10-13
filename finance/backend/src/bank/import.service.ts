@@ -11,6 +11,7 @@ import { checkBalances, dedupeKey, type BalanceCheck } from './importRules';
 import { parseIdfcNarration, type ParsedNarration } from './parsers/idfcNarration';
 import { readStatementFile, type StatementRow } from './parsers/statementFile';
 import { autoCategorise, pairTransfers } from './ledger.service';
+import { listAttachments, upload } from '../services/attachment.service';
 
 /**
  * F010-F013 Statement import: read the file, parse narrations (BR-02), mark duplicates (BR-01),
@@ -230,6 +231,13 @@ export async function confirmImport(ctx: AuditContext, input: ImportFile) {
       }
       return b;
     }, { timeoutMs: 120_000 });
+    // F010 / M15: keep the statement file with the import. Stored after the import commits; if
+    // storage fails the import stands and the missing-documents report lists the file (F161).
+    try {
+      await upload(ctx, { recordType: 'BankImportBatch', recordId: batch.id, docKind: 'statement', fileName: input.fileName, contentBase64: input.contentBase64 });
+    } catch (error) {
+      console.error('Statement file not stored:', error);
+    }
     return batchView(batch);
   } catch (error) {
     if (pgCode(error) === 'P0007') throw new UserError('A row falls in a locked month. Unlock it in Settings > Period lock first (BR-36).');
@@ -312,7 +320,7 @@ export async function getBatch(id: string) {
   const b = await prisma.bankImportBatch.findUnique({ where: { id }, include: { bankAccount: true } });
   if (!b) throw new UserError('Import not found', 404);
   const txns = await prisma.bankTxn.findMany({ where: { batchId: id }, orderBy: [{ txnDate: 'asc' }, { seq: 'asc' }] });
-  return { ...batchView(b), rows: txns.map(txnView) };
+  return { ...batchView(b), rows: txns.map(txnView), attachments: await listAttachments('BankImportBatch', id) };
 }
 
 /**

@@ -9,7 +9,7 @@ const MILESTONES = [
   { id: 'M2', title: 'Bank statement import', done: true },
   { id: 'M3', title: 'Ledger and review queue', done: true },
   { id: 'M4', title: 'Vendors', done: true },
-  { id: 'M5', title: 'Documents vault', done: false },
+  { id: 'M5', title: 'Documents vault', done: true },
   { id: 'M6', title: 'Master Ledger migration', done: false },
   { id: 'M7', title: 'Home dashboard', done: false },
 ];

@@ -454,6 +454,43 @@ model VendorBankAccount {
   @@schema("finance")
 }
 
+// ---------- Documents vault (M15) ----------
+
+/// F160. A file attached to any record. The file lives in storage (Google Drive, or the local
+/// folder until Drive is set up); this row is the index. Removing an attachment archives it
+/// with a reason; the file is kept.
+model Attachment {
+  id             String   @id @default(cuid())
+  /// Table of the record it belongs to: Vendor, BankTxn, BankImportBatch...
+  recordType     String
+  recordId       String
+  /// gst_cert, pan, cancelled_cheque, msme_cert, agreement, statement, proof, bill, other
+  docKind        String
+  fileName       String
+  originalName   String
+  mimeType       String
+  sizeBytes      Int
+  sha256         String
+  /// local or drive
+  storage        String
+  /// Drive file id, or the path under the local storage folder.
+  storageKey     String
+  /// /Finance/{FY}/{Module}/{Record}
+  folderPath     String
+  note           String?
+  uploadedBy     String
+  isArchived     Boolean  @default(false)
+  archivedReason String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  createdBy      String?
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy      String?
+
+  @@index([recordType, recordId])
+  @@index([sha256])
+  @@schema("finance")
+}
+
 /// Cache of gstinapi.in lookups (I11), so the 100 free lookups a month are not spent twice.
 model GstinLookup {
   id         String   @id @default(cuid())

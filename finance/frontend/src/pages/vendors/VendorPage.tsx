@@ -12,6 +12,7 @@ import { dateLabel } from '../settings/api';
 import { categoryText, isZero, useCategories } from '../bank/ledgerApi';
 import { TxnPanel } from '../bank/TxnPanel';
 import { VendorForm } from './VendorForm';
+import { Attachments } from '../../components/Attachments';
 import { MSME_LABEL, STATUS_CHIP, TYPE_LABEL, type Vendor, type VendorStatus } from './types';
 
 const BANK_CHIP = {
@@ -136,7 +137,7 @@ export function VendorPage() {
 
       <Card className="p-4 space-y-2">
         <h2 className="font-semibold text-gray-900">Documents</h2>
-        <p className="text-xs text-gray-500">Uploading arrives with the documents vault (next milestone). A vendor can be active without every document; payments then show a warning.</p>
+        <p className="text-xs text-gray-500">A vendor can be active without every document; payments then show a warning.</p>
         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-sm">
           {v.documents.map((d) => (
             <li key={d.kind} className="flex items-center gap-2">
@@ -145,6 +146,7 @@ export function VendorPage() {
             </li>
           ))}
         </ul>
+        <Attachments recordType="Vendor" recordId={v.id} kinds={[...v.documents.filter((d) => !d.present && (d.required || d.kind === 'agreement')).map((d) => d.kind), 'other']} onChange={refresh} />
       </Card>
 
       <Card className="p-4 space-y-3">

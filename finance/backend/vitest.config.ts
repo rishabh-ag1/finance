@@ -1,5 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import dotenv from 'dotenv';
+import os from 'node:os';
+import path from 'node:path';
 
 dotenv.config();
 
@@ -19,6 +21,9 @@ export default defineConfig({
             DATABASE_URL: testDb,
             JWT_SECRET: 'test-only-secret-not-used-anywhere-else',
             NODE_ENV: 'test',
+            // Attachments written by tests go to a temp folder, never the real file store.
+            FILE_STORAGE: 'local',
+            FILE_STORAGE_DIR: path.join(os.tmpdir(), 'entelechy-finance-test-files'),
         },
     },
 });

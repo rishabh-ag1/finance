@@ -8,6 +8,7 @@ import { GST_STATE_CODES, gstinParts, isValidIfsc, isValidPan } from '../lib/gst
 import { UserError } from '../lib/http';
 import { Decimal, moneyText, parseOptionalMoney } from '../lib/money';
 import { getCompany } from './settings.service';
+import { listAttachments, presentKinds } from './attachment.service';
 
 /**
  * M03 Vendors (F030-F038). PAN, state and deductee type come from the GSTIN / PAN, never typed
@@ -250,15 +251,15 @@ export function bankRecentlyChanged(accounts: VendorBankAccount[], now = new Dat
 
 // ---------- Documents checklist (F036) ----------
 
-/** What a vendor file should hold. Uploads arrive with the documents vault (M5). */
-export function documentChecklist(v: Pick<Vendor, 'gstRegistered' | 'msmeType'>) {
+/** What a vendor file should hold (F036); present = an active attachment of that kind (M15). */
+export function documentChecklist(v: Pick<Vendor, 'gstRegistered' | 'msmeType'>, present: Set<string> = new Set()) {
   return [
     { kind: 'gst_cert', label: 'GST certificate', required: v.gstRegistered },
     { kind: 'pan', label: 'PAN card', required: true },
     { kind: 'cancelled_cheque', label: 'Cancelled cheque', required: true },
     { kind: 'msme_cert', label: 'Udyam (MSME) certificate', required: v.msmeType !== 'none' },
     { kind: 'agreement', label: 'Agreement / NDA', required: false },
-  ].map((d) => ({ ...d, present: false }));
+  ].map((d) => ({ ...d, present: present.has(d.kind) }));
 }
 
 // ---------- Reading (F030, F038) ----------
@@ -353,7 +354,7 @@ export async function getVendor(id: string) {
   const paid = txns.filter((t) => t.debit.greaterThan(0) && t.status !== 'ignored');
   const sum = (rows: typeof txns) => rows.reduce((s, t) => s.plus(t.debit), new Decimal(0));
   const inFy = paid.filter((t) => dateText(t.txnDate)! >= fy.from && dateText(t.txnDate)! <= fy.to);
-  const checklist = documentChecklist(v);
+  const checklist = documentChecklist(v, await presentKinds('Vendor', v.id));
 
   const current = v.bankAccounts.find((b) => b.status === 'approved') ?? null;
   const warnings: string[] = [];
@@ -404,6 +405,7 @@ export async function getVendor(id: string) {
     currentBank: current ? bankView(current, names) : null,
     bankHistory: v.bankAccounts.map((b) => bankView(b, names)),
     documents: checklist,
+    attachments: await listAttachments('Vendor', v.id),
     warnings,
     payments: {
       fy: fy.label,

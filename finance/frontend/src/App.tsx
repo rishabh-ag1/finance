@@ -16,6 +16,7 @@ import { ReviewPage } from './pages/bank/ReviewPage';
 import { RulesPage } from './pages/bank/RulesPage';
 import { VendorsPage } from './pages/vendors/VendorsPage';
 import { VendorPage } from './pages/vendors/VendorPage';
+import { DocumentsPage } from './pages/DocumentsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -50,6 +51,9 @@ function App() {
                 <Route element={<ProtectedRoute requiredModule="financeVendors" requiredAction="view" />}>
                   <Route path="/vendors" element={<VendorsPage />} />
                   <Route path="/vendors/:id" element={<VendorPage />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeDocuments" requiredAction="view" />}>
+                  <Route path="/documents" element={<DocumentsPage />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeRules" requiredAction="view" />}>
                   <Route path="/rules" element={<RulesPage />} />

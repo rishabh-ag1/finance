@@ -7,9 +7,10 @@ import { formatINR } from '../../lib/money';
 import { dateLabel } from '../settings/api';
 import { BalanceCheckNote } from './BalanceCheckNote';
 import { BankRows } from './BankRows';
+import { Attachments } from '../../components/Attachments';
 import type { Batch, BankTxn } from './types';
 
-// One imported statement: its balance check and the rows it added (all in Review until M3).
+// One imported statement: its file, balance check and the rows it added.
 export function BatchPage() {
   const { id } = useParams();
   const { data: b, isLoading } = useQuery({
@@ -31,11 +32,15 @@ export function BatchPage() {
           <div><div className="text-gray-500">Skipped (already imported)</div><div className="text-lg font-semibold text-gray-500">{b.rowsDuplicate}</div></div>
           <div><div className="text-gray-500">Closing balance</div><div className="num">{formatINR(b.closingBalance)}</div></div>
         </div>
+        <div>
+          <p className="text-sm font-medium text-gray-700 mb-1">Statement file</p>
+          <Attachments compact recordType="BankImportBatch" recordId={b.id} kinds={['statement']} />
+        </div>
         <BalanceCheckNote check={{ status: b.balanceCheckStatus, notes: b.balanceCheckNotes, missingFrom: b.missingFrom, missingTo: b.missingTo, fileOpening: b.openingBalance, fileClosing: b.closingBalance }} />
       </Card>
       {b.rows.length > 0 ? (
         <>
-          <p className="text-sm text-gray-600">These rows wait in the review queue for a category (next milestone).</p>
+          <p className="text-sm text-gray-600">These rows went through the categorisation rules; check them in the review queue.</p>
           <BankRows rows={b.rows.map((t) => ({
             key: t.id,
             txnDate: t.txnDate,

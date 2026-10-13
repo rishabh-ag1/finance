@@ -47,7 +47,7 @@ When a founder's answer in `docs/open-questions.md` changes behaviour, apply it 
 - Finance never writes to CRM or Inventory tables. The CRM reads Finance data through views (`order_payment_status`, invoice register).
 - The invoice engine (numbering, tax maths, templates, PDF, register) lives only in this app. The CRM calls it through an API (F105); it never generates invoices itself.
 - PDFs: HTML/CSS templates rendered server-side (headless Chromium via Playwright, which Bloc already uses). Template settings (logo, colours, legal details, bank, footer texts, column toggles) are editable in the app; layout lives in code and is versioned. Every issued document stores its template version and a frozen PDF.
-- Files (bills, proofs, challans, PDFs) go to Google Drive under `/Finance/{FY}/{Module}/{Record no}`; the database stores Drive file IDs.
+- Files (bills, proofs, challans, PDFs) go to Google Drive under `/Finance/{FY}/{Module}/{Record no}`; the database stores Drive file IDs. Until a service account is set up, `FILE_STORAGE=local` keeps them in `backend/.files` with the same layout (`backend/src/storage/`). Attachments are never deleted, only archived with a reason.
 
 ## Non-negotiable rules for financial code
 

@@ -9,6 +9,7 @@ import { formatINR } from '../../lib/money';
 import { apiErrorMessage } from '../../lib/utils';
 import { dateLabel } from '../settings/api';
 import { CategoryFields, type CategoryValue } from './CategoryFields';
+import { Attachments } from '../../components/Attachments';
 import {
   categoryText, isZero, NATURE_LABEL, PARTY_LABEL, RELATED_LABEL, STATUS_LABEL, useCategories, useRefreshBank,
   type PartyType, type RelatedPartyType, type TxnDetail,
@@ -95,6 +96,11 @@ export function TxnPanel({ id, onClose }: { id: string; onClose: () => void }) {
               {t.status === 'ignored' && <Button variant="secondary" disabled={act.isPending} onClick={() => act.mutate({ path: 'restore' })}>Restore to review</Button>}
             </div>
           )}
+
+          <div className="border-t border-gray-100 pt-3">
+            <p className="text-sm font-medium text-gray-700 mb-1">Files</p>
+            <Attachments compact recordType="BankTxn" recordId={t.id} kinds={['proof', 'bill', 'other']} />
+          </div>
 
           {history && history.length > 0 && (
             <details className="text-sm">
