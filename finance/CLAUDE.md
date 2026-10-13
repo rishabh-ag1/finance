@@ -14,7 +14,8 @@ This folder is built to move into the Bloc monorepo (github.com/Mani212005/Bloc)
 | How it calculates and decides | `docs/rules.md` | BR-01 to BR-50, each with trigger, logic, worked example, confidence |
 | Decisions still open, and the founders' answers | `docs/open-questions.md` | Answers are typed in the Google Sheet; pull with `npm run spec:pull-answers` |
 | History of spec changes | `docs/changelog.md` | |
-| Phase 1 scope and acceptance tests | `docs/phase-1-plan.md` | Start here when building |
+| Phase 1 scope and acceptance tests | `docs/phase-1-plan.md` | Done (A1-A12 pass) |
+| Phase 2 scope and acceptance tests | `docs/phase-2-plan.md` | Start here when building Phase 2 |
 | Database schema | `backend/prisma/schema.prisma` + `backend/prisma/sql/finance.sql` | `db/phase1_schema.sql` is the original draft, kept for reference only |
 
 Before implementing anything, read the relevant rows of `docs/spec.md` (by feature ID F###) and every rule it references in `docs/rules.md`. If code and docs disagree, the docs win unless the founder says otherwise; then update the docs.
@@ -75,10 +76,13 @@ When a founder's answer in `docs/open-questions.md` changes behaviour, apply it 
 Recorded as D11-D13 in `docs/spec.md` README (and the Google Sheet). Check this list whenever infrastructure changes:
 
 1. **File storage is local** (`FILE_STORAGE=local`, files in `backend/.files`). Switch to Drive: Google Cloud service account, a folder in a Shared Drive shared with it as Content manager, then `FILE_STORAGE=drive`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `DRIVE_ROOT_FOLDER_ID`, and a one-off script to move the existing local files into Drive and update `Attachment.storage` / `storageKey`. The Drive driver (`backend/src/storage/drive.ts`) has not run against real credentials yet: test it first.
-2. **The Google Sheet PRD is updated by hand** from the repo (no service account for `scripts/sync-spec-to-sheet.ts` yet). Once the service account exists: share the sheet with it as Editor and add GitHub secrets `SPEC_SHEET_ID` and `GOOGLE_SERVICE_ACCOUNT_JSON`; the workflow then syncs on every merge to `main`. Last manual update of the sheet: docs as of changelog v0.12 (13 Oct 2026; Open Questions Q28-Q30 added there too). Next manual update: push only rows changed since then (compare with the docs at the v0.12 commit; README rows in the sheet sit 3 rows lower than in spec.md because of blank spacer rows).
+2. **The Google Sheet PRD is updated by hand** from the repo (no service account for `scripts/sync-spec-to-sheet.ts` yet). Once the service account exists: share the sheet with it as Editor and add GitHub secrets `SPEC_SHEET_ID` and `GOOGLE_SERVICE_ACCOUNT_JSON`; the workflow then syncs on every merge to `main`. Last manual update of the sheet: docs as of changelog v0.13 (13 Oct 2026; Open Questions Q28-Q30 added there too). Next manual update: push only rows changed since then (compare with the docs at the v0.13 commit; README rows in the sheet sit 3 rows lower than in spec.md because of blank spacer rows).
 3. **GSTIN Fetch is off** until `GSTINAPI_KEY` (the CRM's gstinapi.in key) is set in `backend/.env`.
 4. **Development database** is Postgres 17 on the founder's PC, port 5433, started outside the Windows service. Production target is Bloc's EC2 Postgres (`bloccrm`, schema `finance`).
 5. **Real IDFC download checked** (Q30 answered 13 Oct 2026): the XLSX export parses as is and previews clean (27 rows, balance to 4,04,901). The founders do the first real import themselves from the Import page; imported rows cannot be deleted. Never commit real statements to the repo.
+
+6. **No email sending**: POs, reminders and invoices are downloaded or shared until a mail account for finance@blocinsects.com is set up (D13 item 6, D14).
+7. **Razorpay and Shiprocket** are built from their documented formats and tested on made-up data until read-only keys and one real settlement / remittance file are shared (D13 item 7).
 
 ## No migration of old data
 
