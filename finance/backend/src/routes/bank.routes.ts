@@ -40,6 +40,7 @@ router.get('/txns', view, handler((req) => ledger.listLedger({
     to: q(req, 'to'),
     status: q(req, 'status') as ledger.LedgerFilter['status'],
     categoryId: q(req, 'categoryId'),
+    subCategoryId: q(req, 'subCategoryId'),
     nature: q(req, 'nature') as ledger.LedgerFilter['nature'],
     direction: q(req, 'direction') as ledger.LedgerFilter['direction'],
     q: q(req, 'q'),

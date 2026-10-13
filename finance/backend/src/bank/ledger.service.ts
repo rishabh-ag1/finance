@@ -137,6 +137,7 @@ export type LedgerFilter = {
   to?: string;
   status?: BankTxnStatus | 'needs_review';
   categoryId?: string;
+  subCategoryId?: string;
   nature?: TxnNature;
   direction?: 'in' | 'out';
   q?: string;
@@ -174,9 +175,9 @@ export async function listLedger(f: LedgerFilter) {
       ],
     }),
   };
-  const lineFilter = f.categoryId || f.nature;
+  const lineFilter = f.categoryId || f.subCategoryId || f.nature;
   if (lineFilter) {
-    const match = { ...(f.categoryId && { categoryId: f.categoryId }), ...(f.nature && { nature: f.nature }) };
+    const match = { ...(f.categoryId && { categoryId: f.categoryId }), ...(f.subCategoryId && { subCategoryId: f.subCategoryId }), ...(f.nature && { nature: f.nature }) };
     where.AND = [{ OR: [match, { status: 'split', splits: { some: { ...match, isArchived: false } } }] }];
   }
 
@@ -196,7 +197,7 @@ export async function listLedger(f: LedgerFilter) {
   let outflow = new Decimal(0);
   for (const r of kept) {
     const lines = lineFilter && r.status === 'split'
-      ? r.splits.filter((s) => (!f.categoryId || s.categoryId === f.categoryId) && (!f.nature || s.nature === f.nature)).map((s) => s.amount)
+      ? r.splits.filter((s) => (!f.categoryId || s.categoryId === f.categoryId) && (!f.subCategoryId || s.subCategoryId === f.subCategoryId) && (!f.nature || s.nature === f.nature)).map((s) => s.amount)
       : [amountOf(r)];
     const amount = lines.reduce((s, a) => s.plus(a), new Decimal(0));
     if (r.debit.greaterThan(0)) outflow = outflow.plus(amount);

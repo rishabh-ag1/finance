@@ -14,7 +14,7 @@ Modules: M01 Settings & Masters, M02 Bank & Cash Ledger, M03 Vendors, M11 Produc
 6. **Vendors** (F030-F038): GSTIN lookup, PAN derivation and deductee type (BR-12, BR-15), MSME, bank details with change control (BR-16), documents checklist, vendor 360 (payments only until Phase 2).
 7. **Documents vault** (F160-F161): Drive upload and folder structure.
 8. ~~**Migration** (F023)~~: dropped (D10). The old Master Ledger is not imported; the founders categorise and describe transactions in the app.
-9. **Home dashboard, Phase 1 slice** (F130): cash, gross/net burn, runway (BR-37), review-queue count, category x month pivot (F131).
+9. **Home dashboard, Phase 1 slice** (F130): cash, gross/net burn, runway (BR-37), review-queue count, category x month pivot (F131). Built (M7).
 
 ## Acceptance checks
 

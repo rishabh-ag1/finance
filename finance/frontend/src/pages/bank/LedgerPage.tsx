@@ -9,7 +9,7 @@ import { LedgerRows } from './LedgerRows';
 import { TxnPanel } from './TxnPanel';
 import { NATURE_LABEL, STATUS_LABEL, useCategories, type LedgerPage as Page, type Nature, type TxnStatus } from './ledgerApi';
 
-const FILTERS = ['accountId', 'from', 'to', 'status', 'nature', 'categoryId', 'direction', 'q'] as const;
+const FILTERS = ['accountId', 'from', 'to', 'status', 'nature', 'categoryId', 'subCategoryId', 'direction', 'q'] as const;
 
 // F014 ledger: every bank row with filters and running totals for the filter. Filters live in the
 // address, so a filtered view can be bookmarked or shared.

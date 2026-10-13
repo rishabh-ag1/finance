@@ -102,11 +102,15 @@ describe.skipIf(!hasDb)('Acceptance A5-A9: ledger and review', () => {
   });
 
   it('F016: rows with no rule stay in Review; bulk accept confirms suggestions', async () => {
-    const innov8 = await row('67177144'); // no rule covers it and no test ever confirms it
-    expect(innov8.status).toBe('review');
+    // No rule covers Innov8. The test DB keeps earlier runs, where A11 categorises Innov8 in its own
+    // account; once that history exists BR-05 step 4 rightly suggests it here too.
+    const innov8 = await row('67177144');
+    const learned = await prisma.bankTxn.count({ where: { bankAccountId: { not: acct }, counterpartyName: innov8.counterpartyName, status: 'categorised' } });
+    expect(innov8.status).toBe(learned ? 'suggested' : 'review');
+    const stuck = await prisma.bankTxn.findMany({ where: { bankAccountId: acct, status: 'review' }, select: { id: true } });
     const suggested = await prisma.bankTxn.findMany({ where: { bankAccountId: acct, status: 'suggested' }, select: { id: true } });
-    const r = await agent.post('/api/bank/txns/accept').send({ ids: [...suggested.map((s) => s.id), innov8.id] });
-    expect(r.body.data).toEqual({ accepted: suggested.length, skipped: 1 });
+    const r = await agent.post('/api/bank/txns/accept').send({ ids: [...suggested, ...stuck].map((s) => s.id) });
+    expect(r.body.data).toEqual({ accepted: suggested.length, skipped: stuck.length });
     expect(await prisma.bankTxn.count({ where: { bankAccountId: acct, status: 'suggested' } })).toBe(0);
   });
 

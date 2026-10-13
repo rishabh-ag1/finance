@@ -297,8 +297,8 @@
 
 - **Module:** M12
 - **Trigger:** Dashboard
-- **Logic:** Gross burn (month) = Operating Expense + COGS + Interest outflows. Net burn = gross burn - Operating Income receipts. Runway (months) = cash in business current accounts today (excluding cash credit headroom, BR-50) / average net burn of last 3 complete months. Capex and loan principal shown as separate lines, not in burn. If net burn <= 0, runway shows 'Cash positive'. Money in transit (BR-45) is shown next to cash but not added to it.
-- **Worked example:** -
+- **Logic:** Gross burn (month) = Operating Expense + COGS + Interest outflows. Net burn = gross burn - Operating Income receipts. Runway (months) = cash in business current accounts today (excluding cash credit headroom, BR-50) / average net burn of last 3 complete months. Capex and loan principal shown as separate lines, not in burn. If net burn <= 0, runway shows 'Cash positive'. Money in transit (BR-45) is shown next to cash but not added to it. Rows that are ignored or still waiting for review are left out; a split row counts by its lines. Runway is rounded down to one decimal.
+- **Worked example:** IDFC fixture as of 13 Oct 2026, after review (Innov8 -> Virtual Office, salaries -> Intern Salary, the Rs 1,180 out-and-back pair ignored). Cash Rs 4,10,869. Net burn Jul Rs 0 (Saiffi tooling is capex), Aug Rs 12,980 (Innov8; Micro Instruments is capex, TDS is tax), Sep Rs 40,152 (R&D Rs 30,152 + salary Rs 10,000; VideAim patent is capex). Average Rs 17,710.67, runway 4,10,869 / 17,710.67 = 23.1 months. Capex FY Rs 15,03,608 and funding Rs 13,00,000 are shown apart.
 - **Confidence:** High
 
 ## BR-38 - Receipt matching

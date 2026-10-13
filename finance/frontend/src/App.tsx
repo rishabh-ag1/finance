@@ -17,6 +17,7 @@ import { RulesPage } from './pages/bank/RulesPage';
 import { VendorsPage } from './pages/vendors/VendorsPage';
 import { VendorPage } from './pages/vendors/VendorPage';
 import { DocumentsPage } from './pages/DocumentsPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +40,9 @@ function App() {
               <Route element={<AppLayout />}>
                 <Route index element={<HomePage />} />
                 <Route path="/account" element={<AccountPage />} />
+                <Route element={<ProtectedRoute requiredModule="financeHome" requiredAction="view" />}>
+                  <Route path="/analytics" element={<AnalyticsPage />} />
+                </Route>
                 <Route element={<ProtectedRoute requiredModule="financeAudit" requiredAction="view" />}>
                   <Route path="/audit" element={<AuditPage />} />
                 </Route>
