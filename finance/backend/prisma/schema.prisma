@@ -117,6 +117,8 @@ model Company {
 
   bankAccounts BankAccount[]
   numberSeries NumberSeries[]
+  importBatches BankImportBatch[]
+  bankTxns     BankTxn[]
 
   @@schema("finance")
 }
@@ -160,8 +162,140 @@ model BankAccount {
   updatedAt        DateTime    @updatedAt @db.Timestamptz(6)
   updatedBy        String?
   entity           Company     @relation(fields: [entityId], references: [id])
+  importBatches    BankImportBatch[]
+  txns             BankTxn[]
 
   @@unique([bankName, accountNumber])
+  @@schema("finance")
+}
+
+// ---------- Bank & cash ledger (M02) ----------
+
+enum BalanceCheckStatus {
+  ok
+  gap
+  mismatch
+
+  @@schema("finance")
+}
+
+/// F010-F012. One row per uploaded statement file.
+model BankImportBatch {
+  id                 String             @id @default(cuid())
+  entityId           String
+  bankAccountId      String
+  fileName           String
+  /// sha256 of the file, so the same download is recognised.
+  fileHash           String
+  /// Google Drive id of the stored file (M15, documents vault).
+  fileDriveId        String?
+  periodFrom         DateTime           @db.Date
+  periodTo           DateTime           @db.Date
+  rowsTotal          Int
+  rowsNew            Int
+  rowsDuplicate      Int
+  openingBalance     Decimal            @db.Decimal(14, 2)
+  closingBalance     Decimal            @db.Decimal(14, 2)
+  balanceCheckStatus BalanceCheckStatus
+  /// BR-03 notes in plain English, one per line.
+  balanceCheckNote   String?
+  missingFrom        DateTime?          @db.Date
+  missingTo          DateTime?          @db.Date
+  totalDebit         Decimal            @db.Decimal(14, 2)
+  totalCredit        Decimal            @db.Decimal(14, 2)
+  importedBy         String
+  importedAt         DateTime           @default(now()) @db.Timestamptz(6)
+  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
+  createdBy          String?
+  updatedAt          DateTime           @updatedAt @db.Timestamptz(6)
+  updatedBy          String?
+  entity             Company            @relation(fields: [entityId], references: [id])
+  bankAccount        BankAccount        @relation(fields: [bankAccountId], references: [id])
+  txns               BankTxn[]
+
+  @@index([bankAccountId, importedAt])
+  @@schema("finance")
+}
+
+enum BankTxnStatus {
+  review
+  suggested
+  categorised
+  matched
+  split
+  transfer
+  ignored
+
+  @@schema("finance")
+}
+
+enum PartyType {
+  vendor
+  customer
+  founder
+  lender
+  govt
+  own_account
+  other
+
+  @@schema("finance")
+}
+
+/// F013-F021. One bank statement row. The imported facts (date, narration, amounts, balance)
+/// never change (database trigger); everything a person decides sits in separate columns.
+model BankTxn {
+  id                   String        @id @default(cuid())
+  entityId             String
+  bankAccountId        String
+  /// Null for manual cash entries (F022).
+  batchId              String?
+  /// Position in the account's statement (oldest first); orders rows within a day.
+  seq                  Int
+  txnDate              DateTime      @db.Date
+  valueDate            DateTime?     @db.Date
+  narrationRaw         String
+  chequeNo             String?
+  debit                Decimal       @default(0) @db.Decimal(14, 2)
+  credit               Decimal       @default(0) @db.Decimal(14, 2)
+  balance              Decimal?      @db.Decimal(14, 2)
+  /// BR-01: account | date | narration | debit | credit | balance.
+  dedupeKey            String
+  // Parsed from the narration (BR-02). parseOk = false sends the row to Review.
+  parseOk              Boolean       @default(false)
+  mode                 String?
+  modeDetail           String?
+  utr                  String?
+  counterpartyName     String?
+  counterpartyIfsc     String?
+  counterpartyAccount  String?
+  counterpartyBank     String?
+  ref2                 String?
+  remark               String?
+  // Decided by people or rules (M3).
+  description          String?
+  categoryId           String?
+  subCategoryId        String?
+  nature               TxnNature?
+  partyType            PartyType?
+  partyId              String?
+  status               BankTxnStatus @default(review)
+  categorisationReason String?
+  transferPairId       String?
+  linkedDocType        String?
+  linkedDocId          String?
+  isManual             Boolean       @default(false)
+  notes                String?
+  createdAt            DateTime      @default(now()) @db.Timestamptz(6)
+  createdBy            String?
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(6)
+  updatedBy            String?
+  entity               Company       @relation(fields: [entityId], references: [id])
+  bankAccount          BankAccount   @relation(fields: [bankAccountId], references: [id])
+  batch                BankImportBatch? @relation(fields: [batchId], references: [id])
+
+  @@unique([bankAccountId, dedupeKey])
+  @@index([bankAccountId, txnDate, seq])
+  @@index([status])
   @@schema("finance")
 }
 

@@ -15,7 +15,7 @@ describe.skipIf(!hasDb)('M1 settings and masters', () => {
     it('seeds once and never duplicates on a second run', async () => {
         await seedOnce();
         expect(await prisma.company.count()).toBe(1);
-        expect(await prisma.bankAccount.count({ where: { bankName: 'IDFC FIRST Bank' } })).toBe(1);
+        expect(await prisma.bankAccount.count({ where: { bankName: 'IDFC FIRST Bank', accountNumber: '88062419345' } })).toBe(1);
         const master = readCategoryMaster();
         const subs = await prisma.subCategory.findMany({ include: { category: true } });
         for (const row of master) {

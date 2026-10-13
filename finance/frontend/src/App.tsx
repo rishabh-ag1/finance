@@ -9,6 +9,8 @@ import { AuditPage } from './pages/AuditPage';
 import { AccountPage } from './pages/AccountPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { CategoriesPage } from './pages/CategoriesPage';
+import { ImportPage } from './pages/bank/ImportPage';
+import { BatchPage } from './pages/bank/BatchPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +35,10 @@ function App() {
                 <Route path="/account" element={<AccountPage />} />
                 <Route element={<ProtectedRoute requiredModule="financeAudit" requiredAction="view" />}>
                   <Route path="/audit" element={<AuditPage />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeBank" requiredAction="view" />}>
+                  <Route path="/import" element={<ImportPage />} />
+                  <Route path="/imports/:id" element={<BatchPage />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeSettings" requiredAction="view" />}>
                   <Route path="/settings" element={<SettingsPage />} />

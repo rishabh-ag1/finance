@@ -17,7 +17,7 @@
 
 - **Module:** M02
 - **Trigger:** On import
-- **Logic:** Split narration on '/'. First token gives mode: IMPS, IMPS-OPM, NEFT, RTGS, UPI, IFT (IDFC internal), OPT/CBDT (tax payment), Ecom (card/gateway), ATM, CHG (charges). Then: reference/UTR, counterparty name, counterparty IFSC, remark. Unknown patterns keep raw text and go to Review. Parser patterns are per bank and stored as config.
+- **Logic:** Split narration on '/'. First token gives mode: IMPS, IMPS-OPM, NEFT, RTGS, UPI, IFT (IDFC internal), OPT/CBDT (tax payment), Ecom (card/gateway), ATM, CHG (charges). Then: reference/UTR, counterparty name, counterparty IFSC, remark. Unknown patterns keep raw text and go to Review. Parser patterns are per bank, one parser per parser_format on the bank account (idfc_v1 for IDFC). IDFC specifics: IMPS-OPM gives mode IMPS with detail OPM; IDFC repeats a truncated copy of the beneficiary name, which is removed; for IFT the second token is the other IDFC account number, not a UTR; UPI carries a bank code instead of an IFSC. The imported date, narration, amounts and balance can never be edited (database trigger).
 - **Worked example:** IMPS-OPM/623112118032/MICRO INSTRUMENTS CO.../SBIN0002468/7009/AdvanceToolingPaymentM gives mode IMPS, UTR 623112118032, party MICRO INSTRUMENTS CO, IFSC SBIN0002468, remark AdvanceToolingPaymentM.
 - **Confidence:** High
 
@@ -25,7 +25,7 @@
 
 - **Module:** M02
 - **Trigger:** On import
-- **Logic:** First row's (balance - credit + debit) must equal the last stored balance for that account. File's last balance must equal opening + credits - debits. Mismatch: batch flagged, missing date range shown, import still allowed with a warning.
+- **Logic:** First row's (balance - credit + debit) must equal the last stored balance for that account. File's last balance must equal opening + credits - debits. Mismatch: batch flagged, missing date range shown, import still allowed with a warning. On the first import the file continues from the account's opening balance; a file that starts with rows already imported continues from them.
 - **Worked example:** Last stored balance 4,60,366 on 7 Sep. Next file's first row must back-calculate to 4,60,366.
 - **Confidence:** High
 

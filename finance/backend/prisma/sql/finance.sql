@@ -156,6 +156,48 @@ language sql stable as $$
   );
 $$;
 
+-- ---------------------------------------------------------------------------
+-- Bank ledger (M02)
+-- ---------------------------------------------------------------------------
+alter table finance."BankTxn" drop constraint if exists bank_txn_one_side;
+alter table finance."BankTxn" add constraint bank_txn_one_side                   -- exactly one of debit/credit
+  check ("debit" >= 0 and "credit" >= 0 and (("debit" > 0) <> ("credit" > 0)));
+
+-- BR-02: the imported facts of a bank row are never edited. Corrections are a note, a split,
+-- an "ignored" status or a reversing entry, never a changed narration or amount.
+create or replace function finance.bank_txn_facts_fixed() returns trigger
+language plpgsql as $$
+begin
+  if new."narrationRaw" is distinct from old."narrationRaw"
+     or new."txnDate" is distinct from old."txnDate"
+     or new."debit" is distinct from old."debit"
+     or new."credit" is distinct from old."credit"
+     or new."balance" is distinct from old."balance"
+     or new."bankAccountId" is distinct from old."bankAccountId"
+     or new."dedupeKey" is distinct from old."dedupeKey" then
+    raise exception 'finance: the imported date, narration, amounts and balance of a bank row cannot be changed'
+      using errcode = 'P0006';
+  end if;
+  return new;
+end $$;
+drop trigger if exists bank_txn_facts_fixed on finance."BankTxn";
+create trigger bank_txn_facts_fixed before update on finance."BankTxn"
+  for each row execute function finance.bank_txn_facts_fixed();
+
+-- BR-36: no new or changed bank rows dated in a locked month.
+create or replace function finance.bank_txn_month_open() returns trigger
+language plpgsql as $$
+begin
+  if finance.is_month_locked(new."entityId", new."txnDate") then
+    raise exception 'finance: % is in a locked month; unlock it in Settings > Period lock first', new."txnDate"
+      using errcode = 'P0007';
+  end if;
+  return new;
+end $$;
+drop trigger if exists bank_txn_month_open on finance."BankTxn";
+create trigger bank_txn_month_open before insert or update on finance."BankTxn"
+  for each row execute function finance.bank_txn_month_open();
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$

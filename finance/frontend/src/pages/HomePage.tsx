@@ -6,7 +6,7 @@ import { cn, CARD_SHADOW } from '../lib/utils';
 const MILESTONES = [
   { id: 'M0', title: 'Sign-in and audit log', done: true },
   { id: 'M1', title: 'Settings and categories', done: true },
-  { id: 'M2', title: 'Bank statement import', done: false },
+  { id: 'M2', title: 'Bank statement import', done: true },
   { id: 'M3', title: 'Ledger and review queue', done: false },
   { id: 'M4', title: 'Vendors', done: false },
   { id: 'M5', title: 'Documents vault', done: false },
