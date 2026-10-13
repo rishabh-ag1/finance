@@ -154,7 +154,48 @@ export async function seedMasters(tx: Tx): Promise<{ companyId: string }> {
     }
 
     await seedCategories(tx);
+    await seedRules(tx);
     return { companyId: company.id };
+}
+
+/**
+ * Default categorisation rules (F017). Each comes from a decision already in the docs:
+ * BR-05 (OPT/CBDT), A6 / BR-04 (Mesa loan), A8 / BR-29 (Newera Living), A7 / D6 (tooling as
+ * Capex), Category Master notes (VideAim, Quick Shape, Makenica, Trinity NDT, founder funds).
+ * Added once; edits in the Rules page are never overwritten.
+ */
+export const DEFAULT_RULES: {
+    name: string; priority: number; matchField: string; operator: string; matchValue: string; direction: 'debit' | 'credit' | null;
+    category: string; sub: string; partyType: 'vendor' | 'founder' | 'lender' | 'govt' | 'other'; description?: string;
+}[] = [
+    { name: 'OPT/CBDT', priority: 10, matchField: 'narration', operator: 'starts_with', matchValue: 'OPT/CBDT', direction: 'debit', category: 'Taxes', sub: 'TDS Deposit', partyType: 'govt', description: 'TDS deposit' },
+    { name: 'Mesa loan (Neos Kosmos)', priority: 20, matchField: 'counterparty_name', operator: 'contains', matchValue: 'NEOS KOSMOS', direction: 'credit', category: 'Financing', sub: 'Loan Received', partyType: 'lender', description: 'Loan from Mesa School of Business (Neos Kosmos)' },
+    { name: 'Newera Living', priority: 30, matchField: 'counterparty_name', operator: 'contains', matchValue: 'NEWERA LIVING', direction: null, category: 'Related Party', sub: 'Newera Living Transfer', partyType: 'other' },
+    { name: 'Founder funds - Rishabh', priority: 40, matchField: 'counterparty_name', operator: 'contains', matchValue: 'RISHABH', direction: 'credit', category: 'Founder Funds', sub: 'Investment - Rishabh', partyType: 'founder' },
+    { name: 'Founder funds - Arnav', priority: 41, matchField: 'counterparty_name', operator: 'contains', matchValue: 'ARNAV', direction: 'credit', category: 'Founder Funds', sub: 'Investment - Arnav', partyType: 'founder' },
+    { name: 'Tooling - Saiffi', priority: 50, matchField: 'counterparty_name', operator: 'contains', matchValue: 'SAIFFI', direction: 'debit', category: 'Capex', sub: 'Tooling & Moulds', partyType: 'vendor' },
+    { name: 'Tooling - Micro Instruments', priority: 51, matchField: 'counterparty_name', operator: 'contains', matchValue: 'MICRO INSTRUMENTS', direction: 'debit', category: 'Capex', sub: 'Tooling & Moulds', partyType: 'vendor' },
+    { name: 'Tooling - Valco', priority: 52, matchField: 'counterparty_name', operator: 'contains', matchValue: 'VALCO', direction: 'debit', category: 'Capex', sub: 'Tooling & Moulds', partyType: 'vendor' },
+    { name: 'Design patent - VideAim', priority: 60, matchField: 'counterparty_name', operator: 'contains', matchValue: 'VIDEAIM', direction: 'debit', category: 'Capex', sub: 'Design Registration / Patents', partyType: 'vendor' },
+    { name: 'Prototyping - Quick Shape', priority: 70, matchField: 'counterparty_name', operator: 'contains', matchValue: 'QUICK SHAPE', direction: 'debit', category: 'R&D', sub: 'Prototyping / 3D Printing', partyType: 'vendor' },
+    { name: 'Prototyping - Makenica', priority: 71, matchField: 'counterparty_name', operator: 'contains', matchValue: 'MAKENICA', direction: 'debit', category: 'R&D', sub: 'Prototyping / 3D Printing', partyType: 'vendor' },
+    { name: 'Lab testing - Trinity NDT', priority: 80, matchField: 'counterparty_name', operator: 'contains', matchValue: 'TRINITY NDT', direction: 'debit', category: 'R&D', sub: 'Electrical / Lab Testing', partyType: 'vendor' },
+];
+
+export async function seedRules(tx: Tx): Promise<void> {
+    for (const r of DEFAULT_RULES) {
+        if (await tx.categorizationRule.findFirst({ where: { name: r.name, isSeeded: true } })) continue;
+        const category = await tx.category.findUnique({ where: { name: r.category } });
+        const sub = category && await tx.subCategory.findUnique({ where: { categoryId_name: { categoryId: category.id, name: r.sub } } });
+        if (!category || !sub) throw new Error(`Default rule "${r.name}": ${r.category} > ${r.sub} is not in the Category Master`);
+        await tx.categorizationRule.create({
+            data: {
+                name: r.name, priority: r.priority, matchField: r.matchField, operator: r.operator, matchValue: r.matchValue,
+                direction: r.direction, setCategoryId: category.id, setSubCategoryId: sub.id, setPartyType: r.partyType,
+                setDescription: r.description ?? null, isSeeded: true,
+            },
+        });
+    }
 }
 
 /** Category Master from docs/spec.md: adds missing categories and sub-categories only. */

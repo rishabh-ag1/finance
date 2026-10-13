@@ -41,7 +41,7 @@
 
 - **Module:** M02
 - **Trigger:** New bank row
-- **Logic:** 1) Matches an expected item (approved payment by UTR or amount+date+party; loan EMI; TDS challan) then take that item's category. 2) Counterparty name maps to a vendor/customer, take its default category. 3) Keyword rules in priority order. 4) Category last used for this counterparty. 5) Review. Store the reason ('Matched PMT-0004', 'Rule: OPT/CBDT', etc.).
+- **Logic:** 1) Matches an expected item (approved payment by UTR or amount+date+party; loan EMI; TDS challan) then take that item's category. 2) Counterparty name maps to a vendor/customer, take its default category. 3) Keyword rules in priority order. 4) Category last used for this counterparty. 5) Review. Store the reason ('Matched PMT-0004', 'Rule: OPT/CBDT', 'Last used for MAKENICA PRIVATE LIMITED'). A suggestion puts the row in Suggested; a person accepts it (one by one or in bulk) to make it Categorised. Own-account transfers (BR-06) are paired before the rules run and are never re-categorised. Step 1 starts in Phase 2 and step 2 with vendors (M4).
 - **Worked example:** OPT/CBDT/... matches keyword rule 'OPT/CBDT' and becomes Tax Payment > TDS Deposit, then the app suggests the open TDS deductions of the previous month to link.
 - **Confidence:** High
 
@@ -49,7 +49,7 @@
 
 - **Module:** M02
 - **Trigger:** Debit in one own account and credit in another
-- **Logic:** Same amount, opposite direction, within 3 days, both accounts belong to Entelechy: pair them, Nature = Transfer, excluded from income and expense. Transfers from founder personal accounts are not Transfers; they are capital, loan from director or reimbursement (user picks).
+- **Logic:** Same amount, opposite direction, within 3 days, both accounts belong to Entelechy: pair them, Nature = Transfer, excluded from income and expense. Transfers from founder personal accounts are not Transfers; they are capital, loan from director or reimbursement (user picks). Own accounts = Entelechy's business current, cash credit, wallet and loan accounts. A narration naming the other account's number is preferred, then the closest date. Unpairing (with a reason) returns both rows to Review.
 - **Worked example:** -
 - **Confidence:** High
 
@@ -57,7 +57,7 @@
 
 - **Module:** M02
 - **Trigger:** User splits a row
-- **Logic:** Sum of split lines must equal the bank amount to the paisa. Each line has its own category, nature, party and linked document. The parent row shows 'Split (n)'.
+- **Logic:** Sum of split lines must equal the bank amount to the paisa. Each line has its own category, nature, party and linked document. The parent row shows 'Split (n)'. Editing a split replaces its lines; removing it (with a reason) archives the lines and returns the row to Review.
 - **Worked example:** One ₹50,000 payment that clears two vendor bills of ₹30,000 and ₹20,000.
 - **Confidence:** High
 
@@ -233,7 +233,7 @@
 
 - **Module:** M02
 - **Trigger:** Bank row from/to Newera Living, founders, Mesa
-- **Logic:** Tagged Related Party with sub-type (business transfer, director loan, capital). Shown in a separate report for the CA because they need specific accounting and disclosure.
+- **Logic:** Tagged Related Party with sub-type (business transfer, director loan, capital); the sub-type starts as Undecided until it is agreed with the CA. Shown in a separate report for the CA because they need specific accounting and disclosure.
 - **Worked example:** ₹7,00,000 from Newera Living on 19 Aug: not income and not an own-account transfer. Needs a decision with the CA (business transfer consideration or loan).
 - **Confidence:** High
 

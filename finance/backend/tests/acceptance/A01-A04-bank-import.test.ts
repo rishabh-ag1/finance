@@ -52,7 +52,7 @@ describe.skipIf(!hasDb)('Acceptance A1-A4: IDFC statement import', () => {
     expect(r.status).toBe(200);
     expect(r.body.data).toMatchObject({ rowsTotal: 22, rowsNew: 22, rowsDuplicate: 0, balanceCheckStatus: 'ok' });
     expect(await prisma.bankTxn.count({ where: { bankAccountId: accountId } })).toBe(22);
-    expect(await prisma.bankTxn.count({ where: { bankAccountId: accountId, status: 'review' } })).toBe(22);
+    expect(await prisma.bankTxn.count({ where: { bankAccountId: accountId, status: { in: ['review', 'suggested'] } } })).toBe(22);
   });
 
   it('A2: importing the same file again adds 0 rows and finds 22 duplicates', async () => {

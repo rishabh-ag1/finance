@@ -10,6 +10,7 @@ import { registerReviewCounter } from '../services/settings.service';
 import { checkBalances, dedupeKey, type BalanceCheck } from './importRules';
 import { parseIdfcNarration, type ParsedNarration } from './parsers/idfcNarration';
 import { readStatementFile, type StatementRow } from './parsers/statementFile';
+import { autoCategorise, pairTransfers } from './ledger.service';
 
 /**
  * F010-F013 Statement import: read the file, parse narrations (BR-02), mark duplicates (BR-01),
@@ -222,6 +223,10 @@ export async function confirmImport(ctx: AuditContext, input: ImportFile) {
             categorisationReason: r.parsed ? null : 'Narration pattern not recognised',
           })),
         });
+        // BR-06 then BR-05, in the same transaction: a paired transfer is never re-categorised.
+        const newIds = (await tx.bankTxn.findMany({ where: { batchId: b.id }, select: { id: true } })).map((t) => t.id);
+        await pairTransfers(tx, newIds);
+        await autoCategorise(tx, newIds);
       }
       return b;
     }, { timeoutMs: 120_000 });

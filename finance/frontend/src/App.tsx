@@ -11,6 +11,9 @@ import { SettingsPage } from './pages/settings/SettingsPage';
 import { CategoriesPage } from './pages/CategoriesPage';
 import { ImportPage } from './pages/bank/ImportPage';
 import { BatchPage } from './pages/bank/BatchPage';
+import { LedgerPage } from './pages/bank/LedgerPage';
+import { ReviewPage } from './pages/bank/ReviewPage';
+import { RulesPage } from './pages/bank/RulesPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +42,11 @@ function App() {
                 <Route element={<ProtectedRoute requiredModule="financeBank" requiredAction="view" />}>
                   <Route path="/import" element={<ImportPage />} />
                   <Route path="/imports/:id" element={<BatchPage />} />
+                  <Route path="/ledger" element={<LedgerPage />} />
+                  <Route path="/review" element={<ReviewPage />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeRules" requiredAction="view" />}>
+                  <Route path="/rules" element={<RulesPage />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeSettings" requiredAction="view" />}>
                   <Route path="/settings" element={<SettingsPage />} />

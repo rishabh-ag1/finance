@@ -198,6 +198,34 @@ drop trigger if exists bank_txn_month_open on finance."BankTxn";
 create trigger bank_txn_month_open before insert or update on finance."BankTxn"
   for each row execute function finance.bank_txn_month_open();
 
+alter table finance."TxnSplit" drop constraint if exists txn_split_amount;
+alter table finance."TxnSplit" add constraint txn_split_amount check ("amount" > 0);
+
+alter table finance."CategorizationRule" drop constraint if exists rule_shape;
+alter table finance."CategorizationRule" add constraint rule_shape check (
+  "matchField" in ('narration', 'counterparty_name', 'mode', 'remark', 'utr')
+  and "operator" in ('contains', 'equals', 'starts_with', 'regex')
+  and ("direction" is null or "direction" in ('debit', 'credit'))
+  and length(trim("matchValue")) > 0
+);
+
+-- BR-36 also covers split lines: their parent's month must be open.
+create or replace function finance.txn_split_month_open() returns trigger
+language plpgsql as $$
+declare
+  t record;
+begin
+  select "entityId", "txnDate" into t from finance."BankTxn" where id = new."bankTxnId";
+  if finance.is_month_locked(t."entityId", t."txnDate") then
+    raise exception 'finance: % is in a locked month; unlock it in Settings > Period lock first', t."txnDate"
+      using errcode = 'P0007';
+  end if;
+  return new;
+end $$;
+drop trigger if exists txn_split_month_open on finance."TxnSplit";
+create trigger txn_split_month_open before insert or update on finance."TxnSplit"
+  for each row execute function finance.txn_split_month_open();
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
 import {
-  FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, Settings, Tags, Truck, Upload, UserRound,
+  FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, Settings, Tags, Truck, Upload, UserRound, Wand2,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../context/auth';
 import { cn } from '../lib/utils';
+import { useReviewCount } from '../pages/bank/ledgerApi';
 
 const SIDEBAR_STORAGE_KEY = 'bloc-finance:sidebar-expanded';
 
@@ -16,13 +17,16 @@ type NavItem = {
   module: string;
   /** Not built yet: shown greyed out so the founders can see what is coming. */
   soon?: boolean;
+  /** Shows a count next to the label. */
+  badge?: 'review';
 };
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Home', icon: House, module: 'financeHome' },
   { to: '/import', label: 'Import statement', icon: Upload, module: 'financeBank' },
-  { to: '/ledger', label: 'Bank ledger', icon: Landmark, module: 'financeBank', soon: true },
-  { to: '/review', label: 'Review queue', icon: ListChecks, module: 'financeBank', soon: true },
+  { to: '/ledger', label: 'Bank ledger', icon: Landmark, module: 'financeBank' },
+  { to: '/review', label: 'Review queue', icon: ListChecks, module: 'financeBank', badge: 'review' },
+  { to: '/rules', label: 'Rules', icon: Wand2, module: 'financeRules' },
   { to: '/vendors', label: 'Vendors', icon: Truck, module: 'financeVendors', soon: true },
   { to: '/documents', label: 'Documents', icon: FileText, module: 'financeDocuments', soon: true },
   { to: '/categories', label: 'Categories', icon: Tags, module: 'financeSettings' },
@@ -46,6 +50,7 @@ export function AppLayout() {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, expanded ? 'true' : 'false');
   }, [expanded]);
 
+  const { data: reviewCount } = useReviewCount();
   const items = NAV_ITEMS.filter((item) => hasPermission(item.module, 'view'));
 
   const handleLogout = async () => {
@@ -102,7 +107,7 @@ export function AppLayout() {
                 {expanded ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
               </button>
             </div>
-            {items.map(({ to, label, icon: Icon, soon }) =>
+            {items.map(({ to, label, icon: Icon, soon, badge }) =>
               soon ? (
                 <span
                   key={to}
@@ -127,6 +132,11 @@ export function AppLayout() {
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {expanded && <span className="truncate">{label}</span>}
+                  {badge === 'review' && !!reviewCount && (
+                    <span title={`${reviewCount} to review`} className={cn('rounded-full bg-amber-500 px-1.5 text-[10.5px] font-bold leading-[16px] text-white', expanded ? 'ml-auto' : '-ml-2')}>
+                      {reviewCount}
+                    </span>
+                  )}
                 </NavLink>
               )
             )}

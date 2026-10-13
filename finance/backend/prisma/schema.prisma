@@ -284,6 +284,8 @@ model BankTxn {
   linkedDocType        String?
   linkedDocId          String?
   isManual             Boolean       @default(false)
+  /// BR-29 sub-type for Related Party rows: business_transfer, director_loan, capital, undecided.
+  relatedPartyType     String?
   notes                String?
   createdAt            DateTime      @default(now()) @db.Timestamptz(6)
   createdBy            String?
@@ -292,10 +294,70 @@ model BankTxn {
   entity               Company       @relation(fields: [entityId], references: [id])
   bankAccount          BankAccount   @relation(fields: [bankAccountId], references: [id])
   batch                BankImportBatch? @relation(fields: [batchId], references: [id])
+  splits               TxnSplit[]
 
   @@unique([bankAccountId, dedupeKey])
   @@index([bankAccountId, txnDate, seq])
   @@index([status])
+  @@index([counterpartyName])
+  @@schema("finance")
+}
+
+/// BR-07, F018. Lines of a split bank row; they add up to the bank amount to the paisa.
+/// Unsplitting archives the lines (never deleted).
+model TxnSplit {
+  id            String     @id @default(cuid())
+  bankTxnId     String
+  lineNo        Int
+  amount        Decimal    @db.Decimal(14, 2)
+  categoryId    String
+  subCategoryId String?
+  nature        TxnNature
+  partyType     PartyType?
+  description   String?
+  linkedDocType String?
+  linkedDocId   String?
+  note          String?
+  isArchived    Boolean    @default(false)
+  createdAt     DateTime   @default(now()) @db.Timestamptz(6)
+  createdBy     String?
+  updatedAt     DateTime   @updatedAt @db.Timestamptz(6)
+  updatedBy     String?
+  bankTxn       BankTxn    @relation(fields: [bankTxnId], references: [id])
+
+  @@index([bankTxnId])
+  @@schema("finance")
+}
+
+/// BR-05 step 3, F017. Keyword rules applied in priority order (lowest number first).
+model CategorizationRule {
+  id               String      @id @default(cuid())
+  name             String
+  priority         Int
+  /// narration, counterparty_name, mode, remark, utr
+  matchField       String
+  /// contains, equals, starts_with, regex (case-insensitive)
+  operator         String
+  matchValue       String
+  /// debit, credit, or null for both
+  direction        String?
+  amountMin        Decimal?    @db.Decimal(14, 2)
+  amountMax        Decimal?    @db.Decimal(14, 2)
+  setCategoryId    String
+  setSubCategoryId String?
+  /// Null = the sub-category's nature.
+  setNature        TxnNature?
+  setPartyType     PartyType?
+  setDescription   String?
+  isActive         Boolean     @default(true)
+  /// Created by the seed from the spec's default rules.
+  isSeeded         Boolean     @default(false)
+  createdAt        DateTime    @default(now()) @db.Timestamptz(6)
+  createdBy        String?
+  updatedAt        DateTime    @updatedAt @db.Timestamptz(6)
+  updatedBy        String?
+
+  @@index([priority])
   @@schema("finance")
 }
 
