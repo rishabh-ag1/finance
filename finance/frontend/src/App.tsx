@@ -24,6 +24,9 @@ import { PoPage } from './pages/purchases/PoPage';
 import { BillsPage } from './pages/bills/BillsPage';
 import { BillFormPage } from './pages/bills/BillFormPage';
 import { BillPage } from './pages/bills/BillPage';
+import { PayablesPage } from './pages/payments/PayablesPage';
+import { PaymentFormPage } from './pages/payments/PaymentFormPage';
+import { PaymentPage } from './pages/payments/PaymentPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -58,6 +61,12 @@ function App() {
                   <Route path="/bills/new" element={<BillFormPage mode="new" />} />
                   <Route path="/bills/:id" element={<BillPage />} />
                   <Route path="/bills/:id/edit" element={<BillFormPage mode="edit" />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financePayments" requiredAction="view" />}>
+                  <Route path="/payables" element={<PayablesPage />} />
+                  <Route path="/payments/new" element={<PaymentFormPage mode="new" />} />
+                  <Route path="/payments/:id" element={<PaymentPage />} />
+                  <Route path="/payments/:id/edit" element={<PaymentFormPage mode="edit" />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeHome" requiredAction="view" />}>
                   <Route path="/analytics" element={<AnalyticsPage />} />

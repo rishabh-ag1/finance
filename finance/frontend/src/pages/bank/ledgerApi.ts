@@ -40,6 +40,7 @@ export type LedgerTxn = {
   remark: string | null; description: string | null; categoryId: string | null; subCategoryId: string | null; nature: Nature | null;
   partyType: PartyType | null; status: TxnStatus; categorisationReason: string | null; notes: string | null;
   relatedPartyType: RelatedPartyType | null; transferPairId: string | null; splits: Split[];
+  linkedDocType: string | null; linkedDocId: string | null;
 };
 
 export type TxnDetail = LedgerTxn & { pair: { id: string; bankName: string; txnDate: string; debit: string; credit: string } | null };

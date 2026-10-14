@@ -197,10 +197,19 @@ async function docData(input: BillInput, existingId: string | null) {
 
   // TDS: on tax invoices when booked; on quotes and proformas when the advance is paid (BR-11).
   let tds = { tdsApplicable: false, tdsSectionId: null as string | null, tdsBase: zero(), tdsRate: zero(), tdsAmount: zero(), tdsOverrideReason: null as string | null };
-  let suggestion: TdsSuggestion | null = null;
+  let suggestion: TdsSuggestion | null = null as TdsSuggestion | null;
   if (input.docType === 'tax_invoice') {
     const sectionId = input.tds?.sectionId ?? vendor.defaultTdsSectionId ?? null;
     suggestion = await tdsSuggestion(vendor, sectionId, taxableValue, docDate, existingId);
+    const advanceDocs = [input.replacesDocumentId].filter(Boolean) as string[];
+    const advanceTds = advanceDocs.length
+      ? (await prisma.paymentAllocation.findMany({ where: { docId: { in: advanceDocs }, isArchived: false, payment: { status: { in: ['paid', 'reconciled'] } } } }))
+        .reduce((s, a) => s.plus(a.tdsAmount), zero())
+      : zero();
+    if (suggestion.applicable && advanceTds.greaterThan(0)) {
+      const rest = Decimal.max(new Decimal(suggestion.amount).minus(advanceTds), 0);
+      suggestion = { ...suggestion, amount: rest.toFixed(2), reason: `${suggestion.reason}; less ${formatINR(advanceTds)} already deducted on the advance (BR-11)` };
+    }
     const t = input.tds;
     if (!t) {
       tds = { tdsApplicable: suggestion.applicable, tdsSectionId: suggestion.applicable ? suggestion.sectionId : sectionId, tdsBase: new Decimal(suggestion.base), tdsRate: new Decimal(suggestion.rate), tdsAmount: new Decimal(suggestion.amount), tdsOverrideReason: null };
@@ -305,6 +314,13 @@ export async function refreshDocAmounts(tx: Tx, id: string) {
     const ns = await tx.vendorDocument.findMany({ where: { againstDocumentId: id, status: { not: 'cancelled' } } });
     for (const n of ns) notes = n.docType === 'debit_note' ? notes.plus(n.totalValue) : notes.minus(n.totalValue);
   }
+  // BR-08 / BR-09: what recorded payments settled on this document, and advances applied to it.
+  const live = { isArchived: false, payment: { status: { in: ['paid', 'reconciled'] as ('paid' | 'reconciled')[] } } };
+  const gross = (rows: { amount: Decimal; tdsAmount: Decimal }[]) => rows.reduce((s, r) => s.plus(r.amount).plus(r.tdsAmount), zero());
+  const paidAmount = gross(await tx.paymentAllocation.findMany({ where: { docId: id, ...live } }));
+  const advancesApplied = d.docType === 'tax_invoice' ? gross(await tx.paymentAllocation.findMany({ where: { appliedToDocId: id, ...live } })) : zero();
+  d.paidAmount = paidAmount;
+  d.advancesApplied = advancesApplied;
   const isNote = NOTE_TYPES.includes(d.docType);
   const a = isNote
     ? { netPayable: zero(), outstanding: zero() }
@@ -313,7 +329,7 @@ export async function refreshDocAmounts(tx: Tx, id: string) {
   if (d.docType === 'tax_invoice' && ['approved', 'partially_paid', 'paid'].includes(d.status)) {
     status = a.outstanding.lessThanOrEqualTo(0) ? 'paid' : d.paidAmount.plus(d.advancesApplied).greaterThan(0) ? 'partially_paid' : 'approved';
   }
-  await tx.vendorDocument.update({ where: { id }, data: { notesAdjustment: notes, netPayable: a.netPayable, outstanding: a.outstanding, status } });
+  await tx.vendorDocument.update({ where: { id }, data: { paidAmount, advancesApplied, notesAdjustment: notes, netPayable: a.netPayable, outstanding: a.outstanding, status } });
   if (d.againstDocumentId) await refreshDocAmounts(tx, d.againstDocumentId);
 }
 
@@ -322,7 +338,17 @@ export async function refreshPoBilling(tx: Tx, poId: string) {
   const docs = await tx.vendorDocument.findMany({ where: { poId, docType: 'tax_invoice', status: { not: 'cancelled' } }, include: { lines: { where: { isArchived: false } } } });
   const billedTaxable = docs.reduce((s, d) => s.plus(d.taxableValue), zero());
   const billedTotal = docs.reduce((s, d) => s.plus(d.totalValue), zero());
-  await tx.purchaseOrder.update({ where: { id: poId }, data: { billedTaxable, billedTotal } });
+  // Paid on the PO: payments to its documents and advances paid straight against it (BR-08, BR-09).
+  const docIds = (await tx.vendorDocument.findMany({ where: { poId }, select: { id: true } })).map((d) => d.id);
+  const allocs = await tx.paymentAllocation.findMany({
+    where: { isArchived: false, payment: { status: { in: ['paid', 'reconciled'] } }, OR: [{ poId }, { docId: { in: docIds } }] },
+    include: { payment: false },
+  });
+  const advDocs = new Set((await tx.vendorDocument.findMany({ where: { id: { in: docIds }, docType: { in: ['quote', 'proforma'] } }, select: { id: true } })).map((d) => d.id));
+  const g = (a: { amount: Decimal; tdsAmount: Decimal }) => a.amount.plus(a.tdsAmount);
+  const paidTotal = allocs.reduce((s, a) => s.plus(g(a)), zero());
+  const advanceTotal = allocs.filter((a) => !a.appliedToDocId && (a.poId || (a.docId && advDocs.has(a.docId)))).reduce((s, a) => s.plus(g(a)), zero());
+  await tx.purchaseOrder.update({ where: { id: poId }, data: { billedTaxable, billedTotal, paidTotal, advanceTotal } });
   const qty = new Map<string, Decimal>();
   for (const l of docs.flatMap((d) => d.lines)) if (l.poLineId) qty.set(l.poLineId, (qty.get(l.poLineId) ?? zero()).plus(l.qty));
   for (const pl of await tx.poLine.findMany({ where: { poId, isArchived: false } })) {
@@ -340,6 +366,8 @@ export async function createBill(ctx: AuditContext, input: BillInput) {
     await replaceLines(tx, d.id, lines);
     if (header.replacesDocumentId) {
       await tx.vendorDocument.update({ where: { id: header.replacesDocumentId }, data: { status: 'replaced', statusReason: `Replaced by tax invoice ${header.docNumber}` } });
+      // BR-09: the advance paid against the proforma now settles the tax invoice.
+      await tx.paymentAllocation.updateMany({ where: { docId: header.replacesDocumentId, isArchived: false, appliedToDocId: null }, data: { appliedToDocId: d.id, appliedAt: new Date() } });
     }
     await refreshDocAmounts(tx, d.id);
     if (header.poId) await refreshPoBilling(tx, header.poId);
@@ -414,12 +442,18 @@ export async function cancelBill(ctx: AuditContext, id: string) {
   if (!ctx.reason?.trim()) throw new UserError('Say why the document is cancelled');
   const d = await loadDoc(id);
   if (['cancelled', 'paid', 'replaced'].includes(d.status)) throw new UserError(`A ${DOC_STATUS_LABEL[d.status].toLowerCase()} document cannot be cancelled`);
-  if (!d.paidAmount.isZero() || !d.advancesApplied.isZero()) throw new UserError('Payments are allocated to this document; it cannot be cancelled');
+  if (!d.paidAmount.isZero()) throw new UserError('Payments are allocated to this document; it cannot be cancelled');
+  const poAdvances = await prisma.paymentAllocation.count({ where: { appliedToDocId: id, poId: { not: null }, isArchived: false } });
+  if (poAdvances) throw new UserError('PO advances are applied to this invoice; take them off first');
   const notes = await prisma.vendorDocument.count({ where: { againstDocumentId: id, status: { not: 'cancelled' } } });
   if (notes) throw new UserError('Debit or credit notes point to this invoice; cancel them first');
   await withAudit(ctx, async (tx) => {
     await tx.vendorDocument.update({ where: { id }, data: { status: 'cancelled', statusReason: ctx.reason } });
-    if (d.replacesDocumentId) await tx.vendorDocument.update({ where: { id: d.replacesDocumentId }, data: { status: 'awaiting_tax_invoice', statusReason: null } });
+    if (d.replacesDocumentId) {
+      await tx.vendorDocument.update({ where: { id: d.replacesDocumentId }, data: { status: 'awaiting_tax_invoice', statusReason: null } });
+      await tx.paymentAllocation.updateMany({ where: { docId: d.replacesDocumentId, appliedToDocId: id }, data: { appliedToDocId: null, appliedAt: null } });
+      await refreshDocAmounts(tx, d.replacesDocumentId);
+    }
     if (d.againstDocumentId) await refreshDocAmounts(tx, d.againstDocumentId);
     if (d.poId) await refreshPoBilling(tx, d.poId);
   });

@@ -11,6 +11,7 @@ export const FINANCE_MODULES = {
     financeVendors: 'Vendors',
     financePurchases: 'Purchase orders',
     financeBills: 'Vendor bills',
+    financePayments: 'Payments out',
     financeDocuments: 'Documents vault',
     financeUsers: 'Users and roles',
     financeAudit: 'Audit log',

@@ -65,7 +65,7 @@
 
 - **Module:** M06/M02
 - **Trigger:** Payment recorded or bank debit matched
-- **Logic:** Payment amount = sum of allocations to bills + unallocated (becomes advance). Bill paid amount = sum of allocations + TDS on that bill + advances adjusted. Bank debit links to payment by UTR first, else amount + date (±3 days) + party name similarity.
+- **Logic:** Payment amount = sum of allocations to bills + unallocated (becomes advance). Bill paid amount = sum of allocations + TDS on that bill + advances adjusted. Bank debit links to payment by UTR first, else amount + date (±3 days) + party name similarity. In the app: every rupee of a payment is allocated to a tax invoice or, as an advance, to a quote, proforma or PO (no unanchored amount). The UTR is looked for in the parsed UTR and anywhere in the narration; the amount must be equal and the account the same; names match when at least half of the words agree (IDFC's run-together names count); two equally good rows are left to a person. Matching runs when a payment is recorded and on every statement import, before the rules (BR-05 step 1); the bank row takes the document's category as a suggestion.
 - **Worked example:** PMT-0002 ₹2,84,808 to Micro Instruments, UTR 623112118032, allocated to quote dated 18/08/2026 as advance.
 - **Confidence:** High
 
@@ -73,8 +73,8 @@
 
 - **Module:** M05/M06
 - **Trigger:** Payment made against a Quote or Proforma
-- **Logic:** Payment is recorded as Vendor Advance linked to the quote/PI. When the tax invoice arrives (F057) the advance is applied to it. Advances appear on the vendor 360 and AP dashboard as 'Advance paid, tax invoice pending'.
-- **Worked example:** Valco proforma 931842454696864: ₹62,640 paid 1 Sep. Status stays 'Awaiting tax invoice' until Valco's tax invoice is attached.
+- **Logic:** Payment is recorded as Vendor Advance linked to the quote/PI. When the tax invoice arrives (F057) the advance is applied to it. Advances appear on the vendor 360 and AP dashboard as 'Advance paid, tax invoice pending'. In the app: entering the tax invoice that replaces the quote / proforma moves its paid advances onto the invoice; cancelling that invoice moves them back. Advances paid on a PO are set against a tax invoice of that PO by a person, from the bill page.
+- **Worked example:** Valco proforma 931842454696864: ₹62,640 paid 1 Sep. Status stays 'Awaiting tax invoice' until Valco's tax invoice is attached; then the tax invoice shows advances applied ₹62,640 and nothing owed.
 - **Confidence:** High
 
 ## BR-10 - Money out without a tax invoice
@@ -89,7 +89,7 @@
 
 - **Module:** M07
 - **Trigger:** Bill saved or payment made, whichever first
-- **Logic:** TDS is deducted at the earlier of credit (bill booked) or payment (including advance). Base = taxable value excluding GST when GST is shown separately on the invoice; on an advance against a quote without GST break-up, base = advance amount unless the GST portion is identifiable. When the tax invoice later arrives, TDS already deducted on the advance is netted so it is not deducted twice. In the app: a tax invoice gets its TDS when entered; a quote or proforma gets none until its advance is paid (M06). The app suggests the TDS and keeps the suggestion with its reasoning; a different figure needs a reason.
+- **Logic:** TDS is deducted at the earlier of credit (bill booked) or payment (including advance). Base = taxable value excluding GST when GST is shown separately on the invoice; on an advance against a quote without GST break-up, base = advance amount unless the GST portion is identifiable (in the app: an advance on a quote, proforma or PO takes its GST share from that document, base = advance x taxable / total). When the tax invoice later arrives, TDS already deducted on the advance is netted so it is not deducted twice. In the app: a tax invoice gets its TDS when entered; a quote or proforma gets none until its advance is paid (M06). The app suggests the TDS and keeps the suggestion with its reasoning; a different figure needs a reason.
 - **Worked example:** Saiffi bill 040: taxable ₹9,80,000, GST ₹1,76,400, TDS 2% on ₹9,80,000 = ₹19,600. Net paid ₹11,36,800.
 - **Confidence:** High on GST exclusion. [Verify] advance treatment with CA.
 
@@ -178,7 +178,7 @@
 - **Module:** M06/M10
 - **Trigger:** Daily
 - **Logic:** Document is Overdue when today > due date and outstanding > 0. Days overdue = today - due date.
-- **Worked example:** -
+- **Worked example:** A bill due 13 Oct 2026 is 1 day overdue on 14 Oct 2026.
 - **Confidence:** High
 
 ## BR-23 - Due date
@@ -194,15 +194,15 @@
 - **Module:** M06/M10
 - **Trigger:** Report run
 - **Logic:** Buckets by days past due date: Not due, 1-30, 31-60, 61-90, 90+. Unapplied advances shown as a separate column.
-- **Worked example:** -
+- **Worked example:** 1 day past due goes in 1-30, 31 days in 31-60, 91 days in 90+; an advance on a PO that no invoice has used yet shows in the Advances column.
 - **Confidence:** High
 
 ## BR-25 - MSME payment alert
 
 - **Module:** M06
 - **Trigger:** Daily
-- **Logic:** For vendors registered as Micro or Small: max payment period = agreed terms, capped at 45 days from acceptance of goods/services. Alert at day 30 and 40. Unpaid amounts beyond the limit are also not deductible for income tax until paid, so this matters at year end.
-- **Worked example:** -
+- **Logic:** For vendors registered as Micro or Small: max payment period = agreed terms, capped at 45 days from acceptance of goods/services. Alert at day 30 and 40. Unpaid amounts beyond the limit are also not deductible for income tax until paid, so this matters at year end. Acceptance is taken as the received date of the bill, else its date.
+- **Worked example:** Micro vendor's bill accepted 1 Sep 2026 on Net 60: limit 16 Oct 2026 (45 days); alerts on 1 Oct (day 30) and 11 Oct (day 40); from 17 Oct it is past the limit.
 - **Confidence:** High on 45 days. [Verify] tax disallowance provision under new Act.
 
 ## BR-26 - Approvals

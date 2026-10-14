@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
@@ -63,6 +64,7 @@ export function TxnPanel({ id, onClose }: { id: string; onClose: () => void }) {
             { label: 'Category', value: t.status === 'split' ? `Split into ${t.splits.length} lines` : catText ?? <span className="text-amber-700">Not categorised</span> },
             { label: 'Nature', value: t.nature ? NATURE_LABEL[t.nature] : '—' },
             { label: 'Why', value: t.categorisationReason },
+            ...(t.linkedDocType === 'PaymentOut' && t.linkedDocId ? [{ label: 'Payment', value: <Link to={`/payments/${t.linkedDocId}`} className="text-blue-700 hover:underline">Open the payment</Link> }] : []),
             { label: 'Party type', value: t.partyType ? PARTY_LABEL[t.partyType] : '—' },
             ...(t.nature === 'related_party' ? [{ label: 'Related party treatment', value: RELATED_LABEL[t.relatedPartyType ?? 'undecided'] }] : []),
             { label: 'Description', value: t.description },

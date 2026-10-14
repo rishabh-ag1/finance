@@ -11,6 +11,7 @@ import { checkBalances, dedupeKey, type BalanceCheck } from './importRules';
 import { parseIdfcNarration, type ParsedNarration } from './parsers/idfcNarration';
 import { readStatementFile, type StatementRow } from './parsers/statementFile';
 import { autoCategorise, pairTransfers } from './ledger.service';
+import { matchPaymentsForTxns } from '../services/payment.service';
 import { listAttachments, upload } from '../services/attachment.service';
 
 /**
@@ -227,6 +228,8 @@ export async function confirmImport(ctx: AuditContext, input: ImportFile) {
         // BR-06 then BR-05, in the same transaction: a paired transfer is never re-categorised.
         const newIds = (await tx.bankTxn.findMany({ where: { batchId: b.id }, select: { id: true } })).map((t) => t.id);
         await pairTransfers(tx, newIds);
+        // BR-05 step 1: debits that are recorded payments take the payment's document category.
+        await matchPaymentsForTxns(tx, newIds);
         await autoCategorise(tx, newIds);
       }
       return b;
@@ -312,6 +315,8 @@ export function txnView(t: BankTxn) {
     partyId: t.partyId,
     status: t.status,
     categorisationReason: t.categorisationReason,
+    linkedDocType: t.linkedDocType,
+    linkedDocId: t.linkedDocId,
     notes: t.notes,
   };
 }

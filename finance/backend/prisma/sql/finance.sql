@@ -408,6 +408,73 @@ drop trigger if exists vendor_doc_month_open on finance."VendorDocument";
 create trigger vendor_doc_month_open before insert or update on finance."VendorDocument"
   for each row execute function finance.vendor_doc_month_open();
 
+-- ---------------------------------------------------------------------------
+-- Payments out (M06)
+-- ---------------------------------------------------------------------------
+alter table finance."PaymentOut" drop constraint if exists payment_shape;
+alter table finance."PaymentOut" add constraint payment_shape check (
+  "amount" > 0 and "tdsAmount" >= 0
+  and ("status" in ('requested', 'approved', 'cancelled') or ("paymentNo" is not null and "paidDate" is not null and "mode" is not null))
+  and ("status" not in ('cancelled', 'failed') or length(trim(coalesce("statusReason", ''))) > 0)
+  and (("status" = 'reconciled') = ("bankTxnId" is not null))
+);
+alter table finance."PaymentAllocation" drop constraint if exists payment_allocation_shape;
+alter table finance."PaymentAllocation" add constraint payment_allocation_shape check (
+  "amount" >= 0 and "tdsAmount" >= 0 and "amount" + "tdsAmount" > 0
+  and (("docId" is null) <> ("poId" is null))
+);
+
+-- A numbered (paid) payment is fixed: its number, vendor, amount and date never change.
+-- Corrections are a failure / reversal with a reason, never an edit.
+create or replace function finance.payment_paid_fixed() returns trigger
+language plpgsql as $$
+begin
+  if old."paymentNo" is not null and (
+       new."paymentNo" is distinct from old."paymentNo" or new."vendorId" is distinct from old."vendorId"
+    or new."amount" is distinct from old."amount" or new."tdsAmount" is distinct from old."tdsAmount"
+    or new."paidDate" is distinct from old."paidDate") then
+    raise exception 'finance: payment % is recorded; it cannot be changed, only marked failed', old."paymentNo"
+      using errcode = 'P0010';
+  end if;
+  return new;
+end $$;
+drop trigger if exists payment_paid_fixed on finance."PaymentOut";
+create trigger payment_paid_fixed before update on finance."PaymentOut"
+  for each row execute function finance.payment_paid_fixed();
+
+-- Allocations of a recorded payment: only archiving (failure) and applying an advance move.
+create or replace function finance.payment_allocation_fixed() returns trigger
+language plpgsql as $$
+declare
+  p record;
+begin
+  select "paymentNo" into p from finance."PaymentOut" where id = new."paymentId";
+  if p."paymentNo" is null then return new; end if;
+  if tg_op = 'INSERT' or (to_jsonb(new) - array['isArchived', 'appliedToDocId', 'appliedAt', 'updatedAt', 'updatedBy'])
+                          is distinct from (to_jsonb(old) - array['isArchived', 'appliedToDocId', 'appliedAt', 'updatedAt', 'updatedBy']) then
+    raise exception 'finance: payment % is recorded; its allocations cannot change', p."paymentNo" using errcode = 'P0010';
+  end if;
+  return new;
+end $$;
+drop trigger if exists payment_allocation_fixed on finance."PaymentAllocation";
+create trigger payment_allocation_fixed before insert or update on finance."PaymentAllocation"
+  for each row execute function finance.payment_allocation_fixed();
+
+-- BR-36: no payment recorded or re-dated in a locked month.
+create or replace function finance.payment_month_open() returns trigger
+language plpgsql as $$
+begin
+  if new."paidDate" is not null and (tg_op = 'INSERT' or new."paidDate" is distinct from old."paidDate")
+     and finance.is_month_locked(new."entityId", new."paidDate") then
+    raise exception 'finance: % is in a locked month; unlock it in Settings > Period lock first', new."paidDate"
+      using errcode = 'P0007';
+  end if;
+  return new;
+end $$;
+drop trigger if exists payment_month_open on finance."PaymentOut";
+create trigger payment_month_open before insert or update on finance."PaymentOut"
+  for each row execute function finance.payment_month_open();
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
 import api from '../../api';
 import { Attachments } from '../../components/Attachments';
@@ -12,6 +12,7 @@ import { formatINR } from '../../lib/money';
 import { apiErrorMessage } from '../../lib/utils';
 import { GST_MODE_LABEL } from '../purchases/api';
 import { dateLabel } from '../settings/api';
+import { PAYMENT_STATUS_TONE, type DocPayment } from '../payments/api';
 import { DOC_STATUS_TONE, useBill, type Bill } from './api';
 
 const linkButton = 'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-800 hover:bg-gray-50';
@@ -29,6 +30,20 @@ export function BillPage() {
   const { data: b, isLoading } = useBill(id);
   const [asking, setAsking] = useState<'dispute' | 'cancel' | null>(null);
   const [reason, setReason] = useState('');
+  const canSeePayments = hasPermission('financePayments', 'view');
+  const canPay = hasPermission('financePayments', 'edit');
+  const { data: payments } = useQuery({
+    enabled: canSeePayments && !!id, queryKey: ['bill-payments', id],
+    queryFn: async () => (await api.get<{ data: DocPayment[] }>(`/payments/for-document/${id}`)).data.data,
+  });
+  const { data: poAdvances } = useQuery({
+    enabled: canSeePayments && !!id, queryKey: ['bill-po-advances', id], retry: false,
+    queryFn: async () => (await api.get<{ data: { id: string; paymentNo: string | null; paidDate: string | null; gross: string; tdsAmount: string }[] }>(`/payments/advances-for/${id}`)).data.data,
+  });
+  const advance = useMutation({
+    mutationFn: async ({ allocationId, undo }: { allocationId: string; undo?: boolean }) => api.post(`/payments/advances-for/${id}/${undo ? 'unapply' : 'apply'}`, { allocationId }),
+    onSuccess: () => { for (const k of ['bill', 'bill-payments', 'bill-po-advances', 'po', 'payables-due']) qc.invalidateQueries({ queryKey: [k] }); },
+  });
 
   const act = useMutation({
     mutationFn: async ({ action, payload }: { action: string; payload?: object }) => (await api.post<{ data: Bill }>(`/bills/${id}/${action}`, payload ?? {})).data.data,
@@ -58,6 +73,9 @@ export function BillPage() {
           {editable && <Link to={`/bills/${b.id}/edit`} className={linkButton}>Edit</Link>}
           {isInvoice && b.status === 'received' && <Button disabled={act.isPending} onClick={() => act.mutate({ action: 'approve' })}>OK to pay</Button>}
           {b.status === 'awaiting_tax_invoice' && <Link to={`/bills/new?replaces=${b.id}`} className="inline-flex items-center px-3.5 py-2 rounded-lg text-sm font-medium bg-[#0c2c55] text-white hover:bg-[#0e3261]">Enter the tax invoice</Link>}
+          {canPay && ((isInvoice && ['approved', 'partially_paid'].includes(b.status)) || b.status === 'awaiting_tax_invoice') && b.outstanding !== '0.00' && (
+            <Link to={`/payments/new?docId=${b.id}&vendorId=${b.vendorId}`} className="inline-flex items-center px-3.5 py-2 rounded-lg text-sm font-medium bg-[#0c2c55] text-white hover:bg-[#0e3261]">{b.status === 'awaiting_tax_invoice' ? 'Pay advance' : 'Pay'}</Link>
+          )}
           {isInvoice && ['received', 'approved', 'partially_paid'].includes(b.status) && <Button variant="secondary" onClick={() => setAsking('dispute')}>Put on hold</Button>}
           {b.status === 'disputed' && <Button variant="secondary" disabled={act.isPending} onClick={() => act.mutate({ action: 'resolve' })}>Release hold</Button>}
           {isInvoice && !['cancelled', 'replaced'].includes(b.status) && <>
@@ -131,6 +149,32 @@ export function BillPage() {
           </tfoot>
         </table>
       </Card>
+
+      {canSeePayments && (payments?.length || poAdvances?.length) ? (
+        <Card className="p-4 sm:p-6 space-y-2">
+          <h2 className="font-semibold text-gray-900">Payments</h2>
+          <ul className="divide-y divide-gray-100 text-sm">
+            {payments?.map((x) => (
+              <li key={`${x.paymentId}-${x.how}`} className={`py-2 flex items-center justify-between gap-2 ${x.isArchived ? 'opacity-50 line-through' : ''}`}>
+                <Link to={`/payments/${x.paymentId}`} className="text-blue-700 hover:underline">{x.paymentNo ?? 'Request'}{x.paidDate ? ` · ${x.paidDate}` : ''} · {x.how}</Link>
+                <span className="flex items-center gap-2"><span className="num">{formatINR(x.gross)}</span><Chip tone={PAYMENT_STATUS_TONE[x.status]}>{x.statusLabel}</Chip></span>
+              </li>
+            ))}
+          </ul>
+          {canPay && poAdvances && poAdvances.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-sm text-gray-700">Advances paid on {b.poNumber} not yet set against a tax invoice:</p>
+              {poAdvances.map((a) => (
+                <div key={a.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span>{a.paymentNo} · {a.paidDate} · <span className="num">{formatINR(a.gross)}</span></span>
+                  <Button variant="secondary" disabled={advance.isPending} onClick={() => advance.mutate({ allocationId: a.id })}>Set against this invoice</Button>
+                </div>
+              ))}
+              <ErrorNote>{advance.isError && apiErrorMessage(advance.error, 'Could not apply the advance')}</ErrorNote>
+            </div>
+          )}
+        </Card>
+      ) : null}
 
       <Card className="p-4 sm:p-6 space-y-2">
         <h2 className="font-semibold text-gray-900">Files</h2>

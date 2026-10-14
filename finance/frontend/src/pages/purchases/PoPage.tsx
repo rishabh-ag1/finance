@@ -98,6 +98,9 @@ export function PoPage() {
             {open && <Button variant="secondary" onClick={share}><Send className="w-4 h-4 inline -mt-0.5" /> Share / WhatsApp</Button>}
             {open && !po.sentAt && <Button variant="ghost" onClick={() => act.mutate({ action: 'sent', payload: { via: 'other' } })}>Mark as sent</Button>}
           </>}
+          {hasPermission('financePayments', 'edit') && ['approved', 'sent', 'partially_billed'].includes(po.status) && (
+            <Link to={`/payments/new?poId=${po.id}&vendorId=${po.vendorId}`} className={`${linkButton} bg-white border border-gray-200 text-gray-800 hover:bg-gray-50`}>Pay advance</Link>
+          )}
           {['approved', 'sent', 'partially_billed'].includes(po.status) && (
             <Link to={`/purchase-orders/${po.id}/amend`} className={`${linkButton} bg-white border border-gray-200 text-gray-800 hover:bg-gray-50`}>Amend</Link>
           )}

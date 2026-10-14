@@ -415,6 +415,7 @@ model Vendor {
   bankAccounts         VendorBankAccount[]
   purchaseOrders       PurchaseOrder[]
   documents            VendorDocument[]
+  payments             PaymentOut[]
 
   @@index([displayName])
   @@index([pan])
@@ -1006,5 +1007,93 @@ model VendorDocumentLine {
   doc         VendorDocument @relation(fields: [docId], references: [id])
 
   @@index([docId])
+  @@schema("finance")
+}
+
+// ============================================================================
+// M06 Payables & payments out (Phase 2)
+// ============================================================================
+
+/// Requested -> Approved (at once while approvals are off) -> Paid (number, UTR) -> Reconciled
+/// (bank row linked). Failed: the bank returned it. Cancelled: not going ahead.
+enum PaymentStatus {
+  requested
+  approved
+  paid
+  reconciled
+  failed
+  cancelled
+
+  @@schema("finance")
+}
+
+model PaymentOut {
+  id                String              @id @default(cuid())
+  entityId          String
+  /// PMT-{NNNN}, taken when the payment is recorded as paid (BR-30).
+  paymentNo         String?             @unique
+  vendorId          String
+  purpose           String?
+  requestDate       DateTime            @db.Date
+  requestedBy       String
+  /// Cash that leaves the bank = sum of allocation amounts.
+  amount            Decimal             @db.Decimal(14, 2)
+  /// TDS deducted on advances in this payment (BR-11).
+  tdsAmount         Decimal             @default(0) @db.Decimal(14, 2)
+  mode              String?
+  fromBankAccountId String?
+  paidDate          DateTime?           @db.Date
+  utr               String?
+  paidBy            String?
+  paidAt            DateTime?           @db.Timestamptz(6)
+  bankTxnId         String?             @unique
+  /// utr, amount_date_name or manual (BR-08).
+  matchedBy         String?
+  status            PaymentStatus
+  statusReason      String?
+  /// Only when approval bands are switched on (BR-26): [{userId, at}].
+  approvals         Json                @default("[]")
+  notes             String?
+  createdAt         DateTime            @default(now()) @db.Timestamptz(6)
+  createdBy         String?
+  updatedAt         DateTime            @updatedAt @db.Timestamptz(6)
+  updatedBy         String?
+  vendor            Vendor              @relation(fields: [vendorId], references: [id])
+  allocations       PaymentAllocation[]
+
+  @@index([vendorId])
+  @@index([status])
+  @@schema("finance")
+}
+
+/// Where a payment goes (BR-08): a tax invoice, or an advance against a quote / proforma / PO.
+/// amount = cash; tdsAmount = TDS deducted on an advance; together they settle amount + tdsAmount.
+model PaymentAllocation {
+  id                String         @id @default(cuid())
+  paymentId         String
+  docId             String?
+  poId              String?
+  amount            Decimal        @db.Decimal(14, 2)
+  tdsAmount         Decimal        @default(0) @db.Decimal(14, 2)
+  tdsSectionId      String?
+  tdsBase           Decimal        @default(0) @db.Decimal(14, 2)
+  tdsRate           Decimal        @default(0) @db.Decimal(5, 2)
+  tdsSuggestion     Json?
+  tdsOverrideReason String?
+  /// BR-09: the tax invoice an advance has been applied to.
+  appliedToDocId    String?
+  appliedAt         DateTime?      @db.Timestamptz(6)
+  /// Archived when the payment fails or a request is edited; never deleted.
+  isArchived        Boolean        @default(false)
+  createdAt         DateTime       @default(now()) @db.Timestamptz(6)
+  createdBy         String?
+  updatedAt         DateTime       @updatedAt @db.Timestamptz(6)
+  updatedBy         String?
+  payment           PaymentOut     @relation(fields: [paymentId], references: [id])
+
+  @@index([paymentId])
+  @@index([docId])
+  @@index([poId])
+  @@index([appliedToDocId])
   @@schema("finance")
 }

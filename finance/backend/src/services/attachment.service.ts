@@ -103,6 +103,12 @@ export async function recordContext(recordType: string, recordId: string): Promi
       const record = `${d.vendor.displayName} ${d.docNumber}`;
       return { fy: d.fyLabel, module: 'Vendor bills', record, nameBase: `${d.vendor.displayName}_${d.docNumber}` };
     }
+    case 'PaymentOut': {
+      const p = await prisma.paymentOut.findUnique({ where: { id: recordId }, include: { vendor: true } });
+      if (!p) throw new UserError('Payment not found', 404);
+      const record = p.paymentNo ?? `Request ${p.id.slice(-6)}`;
+      return { fy: fyLabel(dateText(p.paidDate ?? p.requestDate)!), module: 'Payments', record, nameBase: `${record}_${p.vendor.displayName}` };
+    }
     default:
       throw new UserError(`Files cannot be attached to ${recordType}`);
   }
