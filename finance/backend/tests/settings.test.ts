@@ -100,8 +100,10 @@ describe.skipIf(!hasDb)('M1 settings and masters', () => {
     it('keeps the tax invoice series off until a reason confirms the invoicing entity', async () => {
         const { agent } = await loggedInFounder(app);
         const inv = (await agent.get('/api/settings/number-series')).body.data.find((s: { docType: string }) => s.docType === 'tax_invoice');
+        // Seeded off. The test database is never wiped and the invoice tests switch it on and back off,
+        // so the next number depends on earlier runs; its format does not.
         expect(inv.isActive).toBe(false);
-        expect(inv.nextPreview).toMatch(/^ELPL\/\d{2}-\d{2}\/00001$/);
+        expect(inv.nextPreview).toMatch(/^ELPL\/\d{2}-\d{2}\/\d{5}$/);
         const r = await agent.put(`/api/settings/number-series/${inv.id}`).send({ ...inv, isActive: true });
         expect(r.status).toBe(400);
         expect(r.body.error).toMatch(/entity/);

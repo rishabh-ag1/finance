@@ -35,6 +35,9 @@ import { ReimbursementPage } from './pages/claims/ReimbursementPage';
 import { ForecastPage } from './pages/ForecastPage';
 import { OrderToBankPage } from './pages/orders/OrderToBankPage';
 import { CustomersPage } from './pages/customers/CustomersPage';
+import { SalesPage } from './pages/sales/SalesPage';
+import { SalesFormPage } from './pages/sales/SalesFormPage';
+import { SalesDocPage } from './pages/sales/SalesDocPage';
 import { CustomerPage } from './pages/customers/CustomerPage';
 import { ProductsPage } from './pages/customers/ProductsPage';
 import { PriceListPage } from './pages/customers/PriceListPage';
@@ -83,6 +86,12 @@ function App() {
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeTds" requiredAction="view" />}>
                   <Route path="/tds" element={<TdsPage />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeSales" requiredAction="view" />}>
+                  <Route path="/sales" element={<SalesPage />} />
+                  <Route path="/sales/new" element={<SalesFormPage mode="new" />} />
+                  <Route path="/sales/:id" element={<SalesDocPage />} />
+                  <Route path="/sales/:id/edit" element={<SalesFormPage mode="edit" />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeCustomers" requiredAction="view" />}>
                   <Route path="/customers" element={<CustomersPage />} />

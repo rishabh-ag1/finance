@@ -1756,3 +1756,179 @@ model PriceListItem {
   @@index([priceListId, invProductId])
   @@schema("finance")
 }
+
+// ============================================================================
+// M09 Sales documents (Phase 3, Step 15)
+// ============================================================================
+
+enum SalesDocType {
+  proforma
+  tax_invoice
+  credit_note
+
+  @@schema("finance")
+}
+
+/// Stored: draft -> issued (number taken) -> cancelled; a draft can be discarded. Conversion of a
+/// proforma, expiry and payment are computed from linked records.
+enum SalesDocStatus {
+  draft
+  issued
+  cancelled
+  discarded
+
+  @@schema("finance")
+}
+
+/// F090, F093, F097: one proforma, tax invoice or credit note. Customer details are frozen at issue
+/// (billTo / shipTo / companySnapshot); after issue only the status, sent / accepted marks,
+/// transport details and the stored PDF move (database).
+model SalesDocument {
+  id                String             @id @default(cuid())
+  entityId          String
+  docType           SalesDocType
+  docNumber         String?            @unique
+  fyLabel           String?
+  docDate           DateTime           @db.Date
+  status            SalesDocStatus     @default(draft)
+  statusReason      String?
+  /// outlet (a CRM company outlet), one_off (typed, not in the CRM) or order (Step 16).
+  customerKind      String
+  crmCompanyId      String?
+  crmBranchId       String?
+  shipToBranchId    String?
+  crmOrderNumber    String?
+  /// { name, address, stateCode, gstin, phone, email }
+  billTo            Json
+  /// { name, address, stateCode }
+  shipTo            Json
+  /// b2b or b2c (BR-49)
+  supplyType        String
+  placeOfSupply     String             @db.Char(2)
+  gstMode           String
+  reverseCharge     Boolean            @default(false)
+  customerPoNo      String?
+  customerPoDate    DateTime?          @db.Date
+  /// Proforma: valid until. Tax invoice: due date from the payment terms.
+  validUntil        DateTime?          @db.Date
+  dueDate           DateTime?          @db.Date
+  paymentTermId     String?
+  ewayBillNo        String?
+  transporter       String?
+  vehicleNo         String?
+  salesPerson       String?
+  notes             String?
+  taxable           Decimal            @default(0) @db.Decimal(14, 2)
+  cgst              Decimal            @default(0) @db.Decimal(14, 2)
+  sgst              Decimal            @default(0) @db.Decimal(14, 2)
+  igst              Decimal            @default(0) @db.Decimal(14, 2)
+  roundOff          Decimal            @default(0) @db.Decimal(14, 2)
+  total             Decimal            @default(0) @db.Decimal(14, 2)
+  /// Tax invoice made from this proforma (BR-33).
+  proformaId        String?
+  /// Credit note: the invoice it reduces, and why (return, rate_difference, discount, other).
+  againstInvoiceId  String?
+  creditReason      String?
+  companySnapshot   Json?
+  templateVersion   Int?
+  pdfAttachmentId   String?
+  issuedBy          String?
+  issuedAt          DateTime?          @db.Timestamptz(6)
+  sentAt            DateTime?          @db.Timestamptz(6)
+  acceptedAt        DateTime?          @db.Timestamptz(6)
+  cancelledAt       DateTime?          @db.Timestamptz(6)
+  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
+  createdBy         String?
+  updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
+  updatedBy         String?
+  lines             SalesDocumentLine[]
+
+  @@index([docType, status])
+  @@index([crmCompanyId])
+  @@index([docDate])
+  @@index([proformaId])
+  @@index([againstInvoiceId])
+  @@schema("finance")
+}
+
+model SalesDocumentLine {
+  id           String        @id @default(cuid())
+  docId        String
+  lineNo       Int
+  invProductId String?
+  sku          String?
+  description  String
+  hsnSac       String?
+  qty          Decimal       @db.Decimal(12, 3)
+  unit         String        @default("Nos")
+  rate         Decimal       @db.Decimal(14, 2)
+  discountPct  Decimal       @default(0) @db.Decimal(5, 2)
+  discount     Decimal       @default(0) @db.Decimal(14, 2)
+  gstRate      Decimal       @db.Decimal(5, 2)
+  taxable      Decimal       @db.Decimal(14, 2)
+  cgst         Decimal       @default(0) @db.Decimal(14, 2)
+  sgst         Decimal       @default(0) @db.Decimal(14, 2)
+  igst         Decimal       @default(0) @db.Decimal(14, 2)
+  lineTotal    Decimal       @db.Decimal(14, 2)
+  /// Where the rate came from (price list, bloc-inv price, typed).
+  priceSource  String?
+  /// Proforma line it was converted from, or invoice line a credit note reduces.
+  sourceLineId String?
+  isArchived   Boolean       @default(false)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+  createdBy    String?
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
+  updatedBy    String?
+  doc          SalesDocument @relation(fields: [docId], references: [id])
+
+  @@index([docId])
+  @@index([sourceLineId])
+  @@schema("finance")
+}
+
+/// F104 template settings. Every save is a new version; an issued document keeps the version it
+/// was printed with and its frozen PDF, so later changes never alter it.
+model InvoiceTemplate {
+  id                    String   @id @default(cuid())
+  version               Int      @unique
+  accentColor           String   @default("#0c2c55")
+  /// inter, roboto, lato or noto-serif
+  font                  String   @default("inter")
+  logoAttachmentId      String?
+  signatureAttachmentId String?
+  bankAccountId         String?
+  upiId                 String?
+  warrantyText          String?
+  declarationText       String?
+  termsText             String?
+  footerText            String?
+  showDiscount          Boolean  @default(true)
+  showHsnSummary        Boolean  @default(true)
+  /// BR-42 [Verify]: goods invoices above this need an e-way bill number.
+  ewayBillThreshold     Decimal  @default(50000) @db.Decimal(14, 2)
+  createdAt             DateTime @default(now()) @db.Timestamptz(6)
+  createdBy             String?
+  updatedAt             DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy             String?
+
+  @@schema("finance")
+}
+
+/// BR-34: months whose GSTR-1 is filed; their invoices cannot be cancelled, only credited.
+model Gstr1Filing {
+  id        String   @id @default(cuid())
+  entityId  String
+  month     DateTime @db.Date
+  filedOn   DateTime @db.Date
+  arn       String?
+  notes     String?
+  /// Marked by mistake: archived with a reason, never deleted.
+  isArchived     Boolean  @default(false)
+  archivedReason String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  createdBy String?
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy String?
+
+  @@schema("finance")
+}

@@ -692,6 +692,93 @@ drop trigger if exists price_list_item_fixed on finance."PriceListItem";
 create trigger price_list_item_fixed before update on finance."PriceListItem"
   for each row execute function finance.price_list_item_fixed();
 
+-- ---------------------------------------------------------------------------
+-- Sales documents (M09): proformas, tax invoices, credit notes
+-- ---------------------------------------------------------------------------
+alter table finance."SalesDocument" drop constraint if exists sales_doc_shape;
+alter table finance."SalesDocument" add constraint sales_doc_shape check (
+  "total" >= 0 and "taxable" >= 0
+  and "supplyType" in ('b2b', 'b2c') and "placeOfSupply" ~ '^[0-9]{2}$'
+  and "customerKind" in ('outlet', 'one_off', 'order')
+  and (("status" = 'draft' or "status" = 'discarded') = ("docNumber" is null))
+  and ("status" not in ('cancelled', 'discarded') or length(trim(coalesce("statusReason", ''))) > 0)
+  and ("docType" <> 'credit_note' or "againstInvoiceId" is not null)
+  -- BR-30: tax invoice and credit note numbers: at most 16 characters, letters, digits, / and -.
+  and ("docNumber" is null or "docType" = 'proforma' or ("docNumber" ~ '^[A-Za-z0-9/-]{1,16}$'))
+);
+
+-- An issued document is fixed: only its status (to Cancelled), sent / accepted marks, transport
+-- details and stored PDF move. Corrections are a cancellation or a credit note (BR-34).
+create or replace function finance.sales_doc_issued_fixed() returns trigger
+language plpgsql as $$
+declare
+  movable text[] := array['status', 'statusReason', 'sentAt', 'acceptedAt', 'cancelledAt', 'pdfAttachmentId',
+                          'ewayBillNo', 'transporter', 'vehicleNo', 'updatedAt', 'updatedBy'];
+begin
+  if old."docNumber" is not null then
+    if (to_jsonb(new) - movable) is distinct from (to_jsonb(old) - movable) then
+      raise exception 'finance: % is issued; it cannot be changed, only cancelled or credited', old."docNumber" using errcode = 'P0015';
+    end if;
+    if old."status" = 'cancelled' and new."status" <> 'cancelled' then
+      raise exception 'finance: % is cancelled; that cannot be undone', old."docNumber" using errcode = 'P0015';
+    end if;
+  elsif old."status" = 'discarded' and new."status" <> 'discarded' then
+    raise exception 'finance: a discarded draft cannot be brought back; copy it instead' using errcode = 'P0015';
+  end if;
+  return new;
+end $$;
+drop trigger if exists sales_doc_issued_fixed on finance."SalesDocument";
+create trigger sales_doc_issued_fixed before update on finance."SalesDocument"
+  for each row execute function finance.sales_doc_issued_fixed();
+
+create or replace function finance.sales_line_fixed() returns trigger
+language plpgsql as $$
+declare
+  n text;
+begin
+  select "docNumber" into n from finance."SalesDocument" where id = new."docId";
+  if n is not null then
+    raise exception 'finance: % is issued; its lines cannot change', n using errcode = 'P0015';
+  end if;
+  return new;
+end $$;
+drop trigger if exists sales_line_fixed on finance."SalesDocumentLine";
+create trigger sales_line_fixed before insert or update on finance."SalesDocumentLine"
+  for each row execute function finance.sales_line_fixed();
+
+-- BR-36: no sales document created, re-dated or issued in a locked month.
+create or replace function finance.sales_doc_month_open() returns trigger
+language plpgsql as $$
+begin
+  if (tg_op = 'INSERT' or new."docDate" is distinct from old."docDate" or (new."docNumber" is not null and old."docNumber" is null))
+     and finance.is_month_locked(new."entityId", new."docDate") then
+    raise exception 'finance: % is in a locked month; unlock it in Settings > Period lock first', new."docDate"
+      using errcode = 'P0007';
+  end if;
+  return new;
+end $$;
+drop trigger if exists sales_doc_month_open on finance."SalesDocument";
+create trigger sales_doc_month_open before insert or update on finance."SalesDocument"
+  for each row execute function finance.sales_doc_month_open();
+
+alter table finance."SalesDocumentLine" drop constraint if exists sales_line_shape;
+alter table finance."SalesDocumentLine" add constraint sales_line_shape check (
+  "qty" > 0 and "rate" >= 0 and "discountPct" >= 0 and "discountPct" <= 100 and "gstRate" >= 0 and "taxable" >= 0
+);
+
+-- Template versions are kept as saved: a new look is a new version.
+create or replace function finance.invoice_template_fixed() returns trigger
+language plpgsql as $$
+begin
+  if (to_jsonb(new) - array['updatedAt', 'updatedBy']) is distinct from (to_jsonb(old) - array['updatedAt', 'updatedBy']) then
+    raise exception 'finance: a saved template version cannot change; save a new version' using errcode = 'P0015';
+  end if;
+  return new;
+end $$;
+drop trigger if exists invoice_template_fixed on finance."InvoiceTemplate";
+create trigger invoice_template_fixed before update on finance."InvoiceTemplate"
+  for each row execute function finance.invoice_template_fixed();
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$

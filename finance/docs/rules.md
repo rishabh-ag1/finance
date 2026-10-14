@@ -258,23 +258,23 @@
 - **Module:** M09
 - **Trigger:** Issue
 - **Logic:** Must contain: supplier name, address, GSTIN; consecutive invoice no; date; recipient name, address and GSTIN (if registered); ship-to address if different; place of supply with state name and code; HSN per line; description; quantity and unit; value; discount; taxable value; tax rate and amount per tax head; total; whether reverse charge applies; signature. Unregistered recipient: name, address and state still captured above the threshold in settings.
-- **Worked example:** -
+- **Worked example:** A tax invoice line for Lure sachet with no HSN cannot be issued: 'Line 1 (Lure sachet) has no HSN code'. As built (Step 15): bill-to name, address and state are always required, so the unregistered-recipient threshold does not arise; a B2B GSTIN must pass the checksum; the date cannot be in the future.
 - **Confidence:** High. [Verify] B2C unregistered-recipient threshold with CA.
 
 ## BR-33 - Proforma to tax invoice
 
 - **Module:** M09
 - **Trigger:** Convert
-- **Logic:** Lines copied; PI marked Converted (fully or partly by quantity); advance receipts on the PI applied to the new invoice. For goods, advance received is not taxed at receipt; tax arises on the invoice.
-- **Worked example:** -
+- **Logic:** Lines copied; PI marked Converted (fully or partly by quantity); advance receipts on the PI applied to the new invoice. For goods, advance received is not taxed at receipt; tax arises on the invoice. As built (Step 15): conversion by quantity per line, never more than is left; lines keep the proforma's rate. Advances are applied when receipts are built (Step 17).
+- **Worked example:** Proforma for 10 Trap Pro: an invoice for 6 leaves 4 (Partly converted); asking for 5 more is refused ('only 4 left'); the last 4 make it Converted.
 - **Confidence:** Likely. [Verify] treatment of advances for goods with CA.
 
 ## BR-34 - Cancellation and credit notes
 
 - **Module:** M09
 - **Trigger:** User cancels or raises credit note
-- **Logic:** Draft: delete allowed. Issued but not yet reported in GSTR-1: cancel allowed, number kept and stamped Cancelled. Already reported: no cancel; raise credit note referencing the invoice. Credit notes have their own series and reduce receivable and output GST.
-- **Worked example:** -
+- **Logic:** Draft: delete allowed. Issued but not yet reported in GSTR-1: cancel allowed, number kept and stamped Cancelled. Already reported: no cancel; raise credit note referencing the invoice. Credit notes have their own series and reduce receivable and output GST. As built (Step 15): drafts are discarded with a reason (no deletes anywhere); months are marked GSTR-1 filed in Settings > Invoices; an invoice with issued credit notes cannot be cancelled; credit notes never exceed the invoice line or total.
+- **Worked example:** Invoice of 14 Oct, October GSTR-1 not filed: cancelled, number kept. Invoice of 28 Sep, September GSTR-1 filed on 11 Oct: cancel refused; credit note ELCN/26-27/0001 for a rate difference of ₹400 on 2 units = ₹800 + GST ₹144 = ₹944.
 - **Confidence:** High
 
 ## BR-35 - Cash view vs accrual view
@@ -337,8 +337,8 @@
 
 - **Module:** M09
 - **Trigger:** Invoice for goods above threshold
-- **Logic:** If invoice value of a consignment exceeds the e-way bill threshold in settings, show a warning and a field for the e-way bill number. Generating the e-way bill stays outside the app in v1.
-- **Worked example:** -
+- **Logic:** If invoice value of a consignment exceeds the e-way bill threshold in settings, show a warning and a field for the e-way bill number. Generating the e-way bill stays outside the app in v1. As built (Step 15): threshold in Settings > Invoices (default ₹50,000); applies to tax invoices with at least one goods line (HSN not starting 99); the number, transporter and vehicle can be added after issue and the PDF is printed again.
+- **Worked example:** Tax invoice of ₹50,001 for goods: warning; ₹50,000: none; a proforma: none.
 - **Confidence:** High on need. [Verify] threshold (₹50,000 consignment value) with CA.
 
 ## BR-43 - Audit trail

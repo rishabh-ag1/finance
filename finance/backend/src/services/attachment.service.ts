@@ -39,6 +39,9 @@ export const DOC_KIND_LABEL: Record<string, string> = {
   proof: 'Proof',
   bill: 'Bill',
   receipt: 'Receipt',
+  invoice_pdf: 'Invoice',
+  logo: 'Logo',
+  signature: 'Signature',
   po_pdf: 'Purchase order',
   quote: 'Quote',
   challan: 'Challan',
@@ -124,6 +127,17 @@ export async function recordContext(recordType: string, recordId: string): Promi
       const v = await prisma.vendor.findUniqueOrThrow({ where: { id: c.vendorId } });
       const record = `Form 16A Q${c.quarter} ${c.fyLabel} ${v.displayName}`;
       return { fy: c.fyLabel, module: 'TDS', record, nameBase: record };
+    }
+    case 'SalesDocument': {
+      const d = await prisma.salesDocument.findUnique({ where: { id: recordId } });
+      if (!d) throw new UserError('Document not found', 404);
+      const day = dateText(d.docDate)!;
+      const who = (d.billTo as { name?: string }).name ?? 'customer';
+      const record = d.docNumber ?? `Draft ${d.id.slice(-6)}`;
+      return { fy: d.fyLabel ?? fyLabel(day), module: 'Sales documents', record, nameBase: `${record}_${who}` };
+    }
+    case 'InvoiceTemplate': {
+      return { fy: fyLabel(todayIST()), module: 'Settings', record: 'Invoice template', nameBase: 'Invoice-template' };
     }
     case 'ReconImport': {
       const i = await prisma.reconImport.findUnique({ where: { id: recordId } });
