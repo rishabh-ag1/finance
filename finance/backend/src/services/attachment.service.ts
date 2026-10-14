@@ -38,6 +38,7 @@ export const DOC_KIND_LABEL: Record<string, string> = {
   statement: 'Bank statement',
   proof: 'Proof',
   bill: 'Bill',
+  receipt: 'Receipt',
   po_pdf: 'Purchase order',
   quote: 'Quote',
   challan: 'Challan',
@@ -123,6 +124,21 @@ export async function recordContext(recordType: string, recordId: string): Promi
       const v = await prisma.vendor.findUniqueOrThrow({ where: { id: c.vendorId } });
       const record = `Form 16A Q${c.quarter} ${c.fyLabel} ${v.displayName}`;
       return { fy: c.fyLabel, module: 'TDS', record, nameBase: record };
+    }
+    case 'ExpenseClaim': {
+      const c = await prisma.expenseClaim.findUnique({ where: { id: recordId } });
+      if (!c) throw new UserError('Claim not found', 404);
+      const u = await prisma.user.findUniqueOrThrow({ where: { id: c.founderUserId } });
+      const day = dateText(c.expenseDate)!;
+      const record = `${day} ${u.firstName} ${c.vendorName}`;
+      return { fy: fyLabel(day), module: 'Founder claims', record, nameBase: `${record}_${c.amount.toFixed(0)}` };
+    }
+    case 'Reimbursement': {
+      const r = await prisma.reimbursement.findUnique({ where: { id: recordId } });
+      if (!r) throw new UserError('Reimbursement not found', 404);
+      const u = await prisma.user.findUniqueOrThrow({ where: { id: r.founderUserId } });
+      const record = `${r.reimbursementNo} ${u.firstName}`;
+      return { fy: fyLabel(dateText(r.paidDate)!), module: 'Founder claims', record, nameBase: record };
     }
     default:
       throw new UserError(`Files cannot be attached to ${recordType}`);

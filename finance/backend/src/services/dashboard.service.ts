@@ -4,22 +4,30 @@ import { lastCompleteMonths, monthFigures, runway, type Flow, type MonthFigures 
 import { ccHeadroom } from '../lib/cashCredit';
 import { dateText, parseDate } from '../lib/dates';
 import { fyMonths, fyRange, monthStart, todayIST } from '../lib/fy';
+import { accrualFlows, billAccrualAmount } from '../lib/accrual';
 import { Decimal, moneyText } from '../lib/money';
 import { missingDocuments } from './missingDocs.service';
 import { payable as tdsPayable } from './tds.service';
+import { balances as founderBalances } from './claim.service';
+import { apAgeing, dueList } from './payment.service';
+import { chaseList } from './bill.service';
+import { forecastWeeks, weekIndex } from '../lib/forecast';
+import { daysOverdue, msmeAlert } from '../lib/payables';
 
 /**
- * M12 dashboards, Phase 1 slice: F130 home (D01-D06, D10, D38) and F131 category x month
- * (D11-D13), cash view only (accrual view needs bills and invoices, Phase 2/3). Every figure
- * comes from categorised bank rows; split rows count by their lines; ignored rows never count.
+ * M12 dashboards: F130 home (D01-D07, D09, D10, D32, D38), F131 category x month (D11-D13) in cash
+ * or accrual view (BR-35), F132 payables (D16-D25) and F136 the 13-week cash forecast (D33).
+ * Cash figures come from categorised bank rows (split rows by their lines, ignored rows never)
+ * plus approved founder claims on their expense date (BR-27).
  */
 
 export const STALE_STATEMENT_DAYS = 7;
 
-type FlowRow = Flow & { categoryId: string | null; subCategoryId: string | null; date: string };
+export type FlowView = 'cash' | 'accrual';
+type FlowRow = Flow & { categoryId: string | null; subCategoryId: string | null; date: string; source: 'bank' | 'bill' | 'claim' };
 
 /** Bank flows with a nature between two dates, split rows replaced by their lines. */
-async function loadFlows(from: string, to: string, accountIds?: string[]): Promise<FlowRow[]> {
+async function bankFlows(from: string, to: string, accountIds?: string[]): Promise<(FlowRow & { linked: boolean })[]> {
   const rows = await prisma.bankTxn.findMany({
     where: {
       txnDate: { gte: parseDate(from), lte: parseDate(to) },
@@ -28,18 +36,54 @@ async function loadFlows(from: string, to: string, accountIds?: string[]): Promi
     },
     include: { splits: { where: { isArchived: false } } },
   });
-  const out: FlowRow[] = [];
+  const out: (FlowRow & { linked: boolean })[] = [];
   for (const t of rows) {
     const date = dateText(t.txnDate)!;
     const month = monthStart(date);
     const direction = t.debit.greaterThan(0) ? 'out' as const : 'in' as const;
+    // BR-35: a row that pays a vendor document is that document; the accrual view counts the document.
+    const linked = t.linkedDocType === 'PaymentOut';
     if (t.status === 'split') {
-      for (const s of t.splits) out.push({ date, month, direction, nature: s.nature, amount: s.amount, categoryId: s.categoryId, subCategoryId: s.subCategoryId });
+      for (const s of t.splits) out.push({ date, month, direction, nature: s.nature, amount: s.amount, categoryId: s.categoryId, subCategoryId: s.subCategoryId, source: 'bank', linked });
     } else if (t.nature) {
-      out.push({ date, month, direction, nature: t.nature, amount: direction === 'out' ? t.debit : t.credit, categoryId: t.categoryId, subCategoryId: t.subCategoryId });
+      out.push({ date, month, direction, nature: t.nature, amount: direction === 'out' ? t.debit : t.credit, categoryId: t.categoryId, subCategoryId: t.subCategoryId, source: 'bank', linked });
     }
   }
   return out;
+}
+
+/** BR-27: approved founder claims are spending on their expense date (cash and accrual views). */
+async function claimFlows(from: string, to: string): Promise<FlowRow[]> {
+  const claims = await prisma.expenseClaim.findMany({ where: { status: { in: ['approved', 'reimbursed'] }, expenseDate: { gte: parseDate(from), lte: parseDate(to) } } });
+  return claims.map((c) => {
+    const date = dateText(c.expenseDate)!;
+    return { date, month: monthStart(date), direction: 'out' as const, nature: c.nature, amount: c.amount, categoryId: c.categoryId, subCategoryId: c.subCategoryId, source: 'claim' as const };
+  });
+}
+
+/** BR-35: vendor bills on their bill date at what they cost (GST only when it cannot be claimed back). */
+async function billFlows(from: string, to: string): Promise<FlowRow[]> {
+  const docs = await prisma.vendorDocument.findMany({
+    where: { docType: { in: ['tax_invoice', 'debit_note', 'credit_note'] }, status: { notIn: ['cancelled', 'replaced'] }, nature: { not: null }, docDate: { gte: parseDate(from), lte: parseDate(to) } },
+  });
+  return docs.map((d) => {
+    const date = dateText(d.docDate)!;
+    const cost = billAccrualAmount({ taxableValue: d.taxableValue, otherCharges: d.otherCharges, gst: d.cgst.plus(d.sgst).plus(d.igst), itcEligible: d.itcEligible });
+    return { date, month: monthStart(date), direction: 'out' as const, nature: d.nature!, amount: d.docType === 'credit_note' ? cost.negated() : cost, categoryId: d.categoryId, subCategoryId: d.subCategoryId, source: 'bill' as const };
+  });
+}
+
+/**
+ * Money flows between two dates. Cash view: bank rows plus approved founder claims. Accrual view
+ * (BR-35): bills plus claims plus bank rows that do not pay a bill. Filtering by bank account
+ * leaves claims and bills out (they belong to no account).
+ */
+async function loadFlows(from: string, to: string, accountIds?: string[], view: FlowView = 'cash'): Promise<FlowRow[]> {
+  const bank = await bankFlows(from, to, accountIds);
+  const claims = accountIds ? [] : await claimFlows(from, to);
+  if (view === 'cash') return [...bank.map(({ linked: _l, ...f }) => f), ...claims];
+  const bills = accountIds ? [] : await billFlows(from, to);
+  return accrualFlows(bank, [...bills, ...claims]);
 }
 
 function figuresView(f: MonthFigures) {
@@ -121,6 +165,10 @@ export async function home(opts: { asOf?: string; accountIds?: string[] } = {}) 
   const pendingBankApprovals = await prisma.vendorBankAccount.count({ where: { status: 'pending' } });
   // D09: TDS deducted and not yet deposited, by month, with its due date (BR-13).
   const tdsToDeposit = (await tdsPayable()).map((m) => ({ month: m.month, amount: m.amount, dueDate: m.dueDate, overdue: m.overdue }));
+  // D07 payables due in 7 days / overdue; D32 owed to each founder.
+  const due = await dueList();
+  const founders = (await founderBalances()).filter((f) => new Decimal(f.owed ?? 0).greaterThan(0) || new Decimal(f.waiting ?? 0).greaterThan(0));
+  const claimsToApprove = await prisma.expenseClaim.count({ where: { status: 'submitted' } });
 
   return {
     asOf,
@@ -135,7 +183,10 @@ export async function home(opts: { asOf?: string; accountIds?: string[] } = {}) 
     capex: { thisMonth: moneyText(thisMonth.capex), fy: moneyText(fyCapex) },
     funding: { fy: moneyText([...funding.values()].reduce((s, x) => s.plus(x), new Decimal(0))), bySubCategory: [...funding.entries()].map(([name, amount]) => ({ name, amount: moneyText(amount) })) },
     months: months.map(figuresView),
+    payables: { overdue: due.totals.overdue, dueThisWeek: due.totals.thisWeek, msmeAtRisk: due.totals.msmeAtRisk },
+    founders,
     actions: {
+      claimsToApprove,
       review,
       uncategorisedLastThree,
       staleStatements,
@@ -156,12 +207,13 @@ const PIVOT_NATURES: Record<'expense' | 'income' | 'capex', TxnNature[]> = {
  * F131 category x month (D11 expense, D12 income) with month-on-month change (D13). Rows are
  * categories with their sub-categories; each cell drills down to the ledger.
  */
-export async function categoryPivot(opts: { fy?: string; kind?: 'expense' | 'income' | 'capex'; accountIds?: string[] } = {}) {
+export async function categoryPivot(opts: { fy?: string; kind?: 'expense' | 'income' | 'capex'; accountIds?: string[]; view?: FlowView } = {}) {
   const kind = opts.kind ?? 'expense';
+  const view = opts.view ?? 'cash';
   const anyDay = opts.fy && /^\d{2}-\d{2}$/.test(opts.fy) ? `20${opts.fy.slice(0, 2)}-04-01` : todayIST();
   const fy = fyRange(anyDay);
   const months = fyMonths(anyDay);
-  const flows = (await loadFlows(fy.from, fy.to, opts.accountIds))
+  const flows = (await loadFlows(fy.from, fy.to, opts.accountIds, view))
     .filter((f) => PIVOT_NATURES[kind].includes(f.nature) && f.direction === (kind === 'income' ? 'in' : 'out'));
 
   const cats = new Map((await prisma.category.findMany()).map((c) => [c.id, c]));
@@ -198,6 +250,7 @@ export async function categoryPivot(opts: { fy?: string; kind?: 'expense' | 'inc
   return {
     fy: fy.label,
     kind,
+    view,
     months,
     currentMonth: months[current],
     rows: [...rows.values()]
@@ -214,5 +267,140 @@ export async function categoryPivot(opts: { fy?: string; kind?: 'expense' | 'inc
       })),
     totals: totals.map((v) => moneyText(v)),
     grandTotal: moneyText(sum(totals)),
+  };
+}
+
+// ---------- F132 payables dashboard (D16-D25) ----------
+
+const OPEN_BILL = ['received', 'approved', 'partially_paid', 'disputed'];
+
+export async function payables(opts: { fy?: string } = {}) {
+  const anyDay = opts.fy && /^\d{2}-\d{2}$/.test(opts.fy) ? `20${opts.fy.slice(0, 2)}-04-01` : todayIST();
+  const fy = fyRange(anyDay);
+  const today = todayIST();
+  const inFy = { gte: parseDate(fy.from), lte: parseDate(fy.to) };
+  const zero = () => new Decimal(0);
+  const sum = <T>(rows: T[], f: (r: T) => Decimal) => rows.reduce((s, r) => s.plus(f(r)), zero());
+
+  // D16-D18: documents received in the FY. A replaced quote / proforma is left out: its tax
+  // invoice carries the same value.
+  const docs = await prisma.vendorDocument.findMany({ where: { docType: { in: ['quote', 'proforma', 'tax_invoice'] }, status: { notIn: ['cancelled', 'replaced'] }, docDate: inFy } });
+  // D19: cash paid in the FY, advances included.
+  const paid = await prisma.paymentOut.findMany({ where: { status: { in: ['paid', 'reconciled'] }, paidDate: inFy } });
+  // D20, D21: every tax invoice, whatever its date; open ones still owe money.
+  const invoices = await prisma.vendorDocument.findMany({ where: { docType: 'tax_invoice', status: { notIn: ['cancelled', 'replaced'] } }, include: { vendor: true } });
+  const open = invoices.filter((d) => OPEN_BILL.includes(d.status) && d.outstanding.greaterThan(0));
+  // D22: advances with no tax invoice yet (BR-10), and PO advances not yet applied to a tax invoice (BR-09).
+  const chase = await chaseList();
+  const poAdvances = await prisma.paymentAllocation.findMany({ where: { isArchived: false, appliedToDocId: null, poId: { not: null }, payment: { status: { in: ['paid', 'reconciled'] } } } });
+  // D23: tax invoices dated in the FY with no PO.
+  const noPo = invoices.filter((d) => !d.poId && d.docDate >= parseDate(fy.from) && d.docDate <= parseDate(fy.to));
+  // D25: owed to micro / small vendors 30+ days after acceptance (45-day limit, BR-25).
+  const msme = open
+    .map((d) => ({ d, alert: msmeAlert({ msmeType: d.vendor.msmeType, acceptedOn: dateText(d.receivedDate ?? d.docDate)!, dueDate: dateText(d.dueDate) }, today) }))
+    .filter((x) => x.alert.level !== 'none');
+
+  return {
+    fy: fy.label,
+    received: { count: docs.length, value: moneyText(sum(docs, (d) => d.totalValue)), netPayable: moneyText(sum(docs, (d) => d.netPayable)) },
+    paid: { count: paid.length, amount: moneyText(sum(paid, (p) => p.amount)) },
+    outstanding: moneyText(sum(open, (d) => d.outstanding)),
+    overdue: moneyText(sum(open.filter((d) => daysOverdue(dateText(d.dueDate), today) > 0), (d) => d.outstanding)),
+    byStatus: {
+      paid: invoices.filter((d) => d.status === 'paid').length,
+      partiallyPaid: invoices.filter((d) => d.status === 'partially_paid').length,
+      unpaid: invoices.filter((d) => ['received', 'approved', 'disputed'].includes(d.status)).length,
+    },
+    withoutTaxInvoice: {
+      amount: chase.totals.advancesWithoutTaxInvoice,
+      documents: chase.totals.awaiting,
+      toChase: chase.totals.toChase,
+      poAdvances: moneyText(sum(poAdvances, (a) => a.amount.plus(a.tdsAmount))),
+    },
+    noPo: { count: noPo.length, value: moneyText(sum(noPo, (d) => d.totalValue)) },
+    ageing: await apAgeing(),
+    msme: {
+      amount: moneyText(sum(msme, (x) => x.d.outstanding)),
+      rows: msme
+        .sort((a, b) => a.alert.limitDate.localeCompare(b.alert.limitDate))
+        .map(({ d, alert }) => ({ id: d.id, docNumber: d.docNumber, vendorName: d.vendor.displayName, msmeType: d.vendor.msmeType, outstanding: moneyText(d.outstanding), daysSinceAcceptance: alert.daysSinceAcceptance, limitDate: alert.limitDate, level: alert.level })),
+    },
+  };
+}
+
+// ---------- F136 13-week cash forecast (D33) ----------
+
+/** Cash in business current accounts and wallets on a date (D01). */
+async function businessCash(asOf: string) {
+  const accounts = await prisma.bankAccount.findMany({ where: { isArchived: false, owner: 'Entelechy', accountType: { in: ['business_current', 'wallet'] } } });
+  let cash = new Decimal(0);
+  for (const a of accounts) cash = cash.plus((await balanceOn(a.id, a.openingBalance, parseDate(asOf))).balance);
+  return cash;
+}
+
+type ForecastItem = { week: number; kind: 'bill' | 'advance' | 'tds' | 'claims' | 'regular'; label: string; date: string | null; amount: Decimal; link: string | null };
+
+/**
+ * D33: opening cash, then each week's expected payments. Dated items fall in their week (anything
+ * already due, or with no date, in week 1). Spending that has no bill (salaries, rent,
+ * subscriptions) is the weekly average of the last 3 complete months of operating bank outflows
+ * that did not pay a bill. Customer receipts (Phase 3 invoices), loan EMIs (Phase 3) and PO
+ * milestones (not dated) are not in the weeks yet; open POs are shown beside them.
+ */
+export async function forecast(opts: { asOf?: string } = {}) {
+  const today = opts.asOf ?? todayIST();
+  const weeks = forecastWeeks(today);
+  const items: ForecastItem[] = [];
+  const add = (date: string | null, it: Omit<ForecastItem, 'week' | 'date'>) => {
+    const week = date ? weekIndex(date, today) : 0;
+    if (week !== null && it.amount.greaterThan(0)) items.push({ ...it, week, date });
+  };
+
+  for (const r of (await dueList()).rows) {
+    add(r.dueDate, { kind: r.isAdvance ? 'advance' : 'bill', label: `${r.vendorName} ${r.docNumber}`, amount: new Decimal(r.owed ?? 0), link: `/bills/${r.id}` });
+  }
+  for (const m of await tdsPayable()) add(m.dueDate, { kind: 'tds', label: `TDS for ${m.month.slice(0, 7)}`, amount: new Decimal(m.amount ?? 0), link: '/tds' });
+  for (const f of await founderBalances()) add(null, { kind: 'claims', label: `Owed to ${f.founderName}`, amount: new Decimal(f.owed ?? 0), link: '/claims' });
+
+  // Regular spending without a bill: weekly average over the last 3 complete months (13 weeks).
+  const lastThree = lastCompleteMonths(today);
+  const end = new Date(Date.parse(`${monthStart(today)}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const bank = await bankFlows(lastThree[0], end);
+  const regularTotal = bank
+    .filter((f) => !f.linked && f.direction === 'out' && ['operating_expense', 'cogs', 'interest'].includes(f.nature))
+    .reduce((s, f) => s.plus(f.amount), new Decimal(0));
+  const regularWeekly = regularTotal.dividedBy(13).toDecimalPlaces(0);
+  if (regularWeekly.greaterThan(0)) {
+    weeks.forEach((_, i) => items.push({ week: i, kind: 'regular', label: 'Regular spending (no bill)', date: null, amount: regularWeekly, link: null }));
+  }
+
+  const opening = await businessCash(today);
+  let running = opening;
+  const rows = weeks.map((w, i) => {
+    const these = items.filter((x) => x.week === i);
+    const out = these.reduce((s, x) => s.plus(x.amount), new Decimal(0));
+    const start = running;
+    running = running.minus(out);
+    return {
+      ...w, opening: moneyText(start), receipts: '0.00', payments: moneyText(out), closing: moneyText(running),
+      items: these.map((x) => ({ kind: x.kind, label: x.label, date: x.date, amount: moneyText(x.amount), link: x.link })),
+    };
+  });
+  const openPos = await prisma.purchaseOrder.findMany({ where: { status: { in: ['approved', 'sent', 'partially_billed'] } } });
+  const poUnbilled = openPos.reduce((s, p) => s.plus(Decimal.max(p.total.minus(p.billedTotal).minus(p.advanceTotal), 0)), new Decimal(0));
+  const firstShort = rows.find((r) => new Decimal(r.closing ?? 0).isNegative());
+  return {
+    asOf: today,
+    openingCash: moneyText(opening),
+    regularWeekly: moneyText(regularWeekly),
+    regularBasis: { from: lastThree[0], to: end, total: moneyText(regularTotal) },
+    weeks: rows,
+    closingCash: moneyText(running),
+    firstShortWeek: firstShort ? firstShort.from : null,
+    notIncluded: {
+      openPurchaseOrders: { count: openPos.length, unbilled: moneyText(poUnbilled) },
+      receipts: 'Customer receipts come with invoicing (Phase 3)',
+      loans: 'Loan EMIs come with the loans module (Phase 3)',
+    },
   };
 }

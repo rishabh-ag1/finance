@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
-import {
-  Banknote, ChartColumn, Percent, ClipboardList, FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings, Tags, Truck, Upload, UserRound, Wand2,
-  type LucideIcon,
-} from 'lucide-react';
+import { Banknote, ChartColumn, Percent, ClipboardList, FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings, Tags, Truck, Upload, UserRound, Wand2, type LucideIcon, CalendarRange, WalletCards } from 'lucide-react';
 import { useAuth } from '../context/auth';
 import { cn } from '../lib/utils';
 import { useReviewCount } from '../pages/bank/ledgerApi';
@@ -24,6 +21,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Home', icon: House, module: 'financeHome' },
   { to: '/analytics', label: 'Category analytics', icon: ChartColumn, module: 'financeHome' },
+  { to: '/forecast', label: 'Cash forecast', icon: CalendarRange, module: 'financeHome' },
   { to: '/import', label: 'Import statement', icon: Upload, module: 'financeBank' },
   { to: '/ledger', label: 'Bank ledger', icon: Landmark, module: 'financeBank' },
   { to: '/review', label: 'Review queue', icon: ListChecks, module: 'financeBank', badge: 'review' },
@@ -33,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/bills', label: 'Vendor bills', icon: ReceiptText, module: 'financeBills' },
   { to: '/payables', label: 'Payables', icon: Banknote, module: 'financePayments' },
   { to: '/tds', label: 'TDS', icon: Percent, module: 'financeTds' },
+  { to: '/claims', label: 'Founder claims', icon: WalletCards, module: 'financeClaims' },
   { to: '/documents', label: 'Documents', icon: FileText, module: 'financeDocuments' },
   { to: '/categories', label: 'Categories', icon: Tags, module: 'financeSettings' },
   { to: '/settings', label: 'Settings', icon: Settings, module: 'financeSettings' },

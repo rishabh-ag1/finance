@@ -22,7 +22,9 @@ type Home = {
   capex: { thisMonth: string; fy: string };
   funding: { fy: string; bySubCategory: { name: string; amount: string }[] };
   months: Month[];
-  actions: { review: number; uncategorisedLastThree: number; staleStatements: { id: string; name: string; lastImportedAt: string | null }[]; missingDocuments: number; pendingBankApprovals: number; tdsToDeposit: { month: string; amount: string; dueDate: string; overdue: boolean }[] };
+  payables: { overdue: string; dueThisWeek: string; msmeAtRisk: number };
+  founders: { founderUserId: string; founderName: string; owed: string; waiting: string }[];
+  actions: { claimsToApprove: number; review: number; uncategorisedLastThree: number; staleStatements: { id: string; name: string; lastImportedAt: string | null }[]; missingDocuments: number; pendingBankApprovals: number; tdsToDeposit: { month: string; amount: string; dueDate: string; overdue: boolean }[] };
 };
 
 const short = (v: string) => formatINR(v, { decimals: false });
@@ -30,19 +32,20 @@ const short = (v: string) => formatINR(v, { decimals: false });
 /** Bars drawn from text amounts: the browser only needs proportions, not money arithmetic. */
 const ratio = (v: string, max: number) => (max > 0 ? Math.max(0, Number(v)) / max : 0);
 
-function Kpi({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'good' | 'bad' }) {
-  return (
-    <Card className="p-3 sm:p-4">
+function Kpi({ label, value, hint, tone, to }: { label: string; value: string; hint?: string; tone?: 'good' | 'bad'; to?: string }) {
+  const card = (
+    <Card className="p-3 sm:p-4 h-full">
       <div className="text-xs text-gray-500">{label}</div>
       <div className={cn('text-xl sm:text-2xl font-semibold num mt-0.5', tone === 'good' && 'text-emerald-700', tone === 'bad' && 'text-red-700')}>{value}</div>
       {hint && <div className="text-xs text-gray-500 mt-0.5">{hint}</div>}
     </Card>
   );
+  return to ? <Link to={to} className="block hover:opacity-90">{card}</Link> : card;
 }
 
-// F130 home dashboard, Phase 1 slice (D01-D06, D10, D38). Cash view from the bank ledger.
+// F130 home dashboard (D01-D07, D09, D10, D32, D38). Cash view from the bank ledger and approved founder claims.
 export function HomePage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { data: h, isLoading } = useQuery({
     queryKey: ['dashboard-home'],
     queryFn: async () => (await api.get<{ data: Home }>('/dashboard/home')).data.data,
@@ -55,6 +58,7 @@ export function HomePage() {
   const noData = h.cash.accounts.every((a) => !a.lastTxnDate);
   const max = Math.max(1, ...h.months.flatMap((m) => [Number(m.grossBurn), Number(m.operatingIncome), Number(m.capex)]));
   const actions = [
+    h.actions.claimsToApprove > 0 && { text: `${h.actions.claimsToApprove} founder claim(s) waiting for approval`, to: '/claims?status=submitted' },
     h.actions.review > 0 && { text: `${h.actions.review} bank row${h.actions.review === 1 ? '' : 's'} to review`, to: '/review' },
     h.actions.uncategorisedLastThree > 0 && { text: `${h.actions.uncategorisedLastThree} row(s) of the last 3 months have no category, so burn may be understated`, to: '/review' },
     h.actions.staleStatements.length > 3 && { text: `${h.actions.staleStatements.length} accounts have no statement imported in the last 7 days`, to: '/import' },
@@ -79,6 +83,17 @@ export function HomePage() {
         <Kpi label={`Net burn ${monthLabel(lastMonth.month)}`} value={short(lastMonth.netBurn)} hint={`Gross ${short(lastMonth.grossBurn)} · income ${short(lastMonth.operatingIncome)}`} />
         <Kpi label="Capex this FY" value={short(h.capex.fy)} hint="Tooling, equipment, patents: not in burn" />
       </div>
+
+      {hasPermission('financePayments', 'view') && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+          <Kpi label="Payables overdue" value={short(h.payables.overdue)} tone={h.payables.overdue !== '0.00' ? 'bad' : undefined} hint={h.payables.msmeAtRisk ? `${h.payables.msmeAtRisk} MSME bill(s) near 45 days` : 'Approved bills and advances'} to="/payables?tab=due" />
+          <Kpi label="Payables due in 7 days" value={short(h.payables.dueThisWeek)} to="/payables?tab=due" />
+          {h.founders.map((f) => (
+            <Kpi key={f.founderUserId} label={`Owed to ${f.founderName}`} value={short(f.owed)} hint={f.waiting !== '0.00' ? `${short(f.waiting)} waiting for approval` : 'Approved claims not yet paid back'} to="/claims" />
+          ))}
+          {h.founders.length === 0 && <Kpi label="Cash forecast" value="13 weeks" hint="What is due each week" to="/forecast" />}
+        </div>
+      )}
 
       {actions.length > 0 && (
         <Card className="p-3 sm:p-4">

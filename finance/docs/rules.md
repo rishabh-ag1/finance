@@ -217,8 +217,8 @@
 
 - **Module:** M14
 - **Trigger:** Expense claim approved
-- **Logic:** Creates payable to the founder. Settled by a bank debit to the founder's account (Nature = Reimbursement). Founder balance = claims - reimbursements. Founder money put into the company is NOT a claim; it is capital, share application money or a director loan (user picks).
-- **Worked example:** -
+- **Logic:** Creates payable to the founder. Settled by a bank debit to the founder's account (Nature = Reimbursement). Founder balance = claims - reimbursements. Founder money put into the company is NOT a claim; it is capital, share application money or a director loan (user picks). As built (Step 12): the other founder approves, only with the receipt attached; approved claims count as spending (their category's nature) on the expense date, in the cash and accrual views and in burn; the reimbursement's bank row is categorised Founder Reimbursement (nature Reimbursement, outside burn) so the expense is never counted twice. Balance = approved and reimbursed claims - reimbursements not failed; rejected and withdrawn claims count for nothing; claims waiting for approval are shown apart. A reimbursement pays whole claims of one founder and matches its bank debit like a vendor payment (BR-08).
+- **Worked example:** Rishabh's claims: ₹2,500 and ₹1,200 approved, ₹800 rejected. Owed ₹3,700. A ₹2,500 reimbursement is paid: owed ₹1,200. If that reimbursement fails, ₹3,700 is owed again.
 - **Confidence:** High
 
 ## BR-28 - Loans and covenant
@@ -281,8 +281,8 @@
 
 - **Module:** M12
 - **Trigger:** Dashboard toggle
-- **Logic:** Cash view: bank rows by transaction date and category. Accrual view: vendor bills by bill date and sales invoices by invoice date, plus bank rows with no document. Never add both for the same item (bank rows linked to a document are excluded from accrual view).
-- **Worked example:** -
+- **Logic:** Cash view: bank rows by transaction date and category. Accrual view: vendor bills by bill date and sales invoices by invoice date, plus bank rows with no document. Never add both for the same item (bank rows linked to a document are excluded from accrual view). As built (Step 12): a bill counts at its cost, taxable value + other charges, plus its GST only when input credit cannot be claimed (itc_eligible off); debit notes add, credit notes subtract; cancelled and replaced documents never count. A bank row linked to a vendor payment is left out of the accrual view (advances included: the cost appears when the tax invoice arrives). Approved founder claims count in both views on the expense date (BR-27). Sales invoices join with Phase 3.
+- **Worked example:** Saiffi bill 040 dated 24 Jul 2026: taxable ₹9,80,000, IGST ₹1,76,400 (credit claimable), TDS ₹19,600; ₹11,36,800 paid on 24 Jul and matched to its bank row. Cash view: capex ₹11,36,800 in July (what left the bank). Accrual view: capex ₹9,80,000 in July, once; the bank row is not added.
 - **Confidence:** High
 
 ## BR-36 - Period lock

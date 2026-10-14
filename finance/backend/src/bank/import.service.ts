@@ -12,6 +12,7 @@ import { parseIdfcNarration, type ParsedNarration } from './parsers/idfcNarratio
 import { readStatementFile, type StatementRow } from './parsers/statementFile';
 import { autoCategorise, pairTransfers } from './ledger.service';
 import { matchPaymentsForTxns } from '../services/payment.service';
+import { matchReimbursementsForTxns } from '../services/claim.service';
 import { listAttachments, upload } from '../services/attachment.service';
 
 /**
@@ -230,6 +231,7 @@ export async function confirmImport(ctx: AuditContext, input: ImportFile) {
         await pairTransfers(tx, newIds);
         // BR-05 step 1: debits that are recorded payments take the payment's document category.
         await matchPaymentsForTxns(tx, newIds);
+        await matchReimbursementsForTxns(tx, newIds);
         await autoCategorise(tx, newIds);
       }
       return b;

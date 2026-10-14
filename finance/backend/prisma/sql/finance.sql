@@ -524,6 +524,75 @@ drop trigger if exists tds_challan_month_open on finance."TdsChallan";
 create trigger tds_challan_month_open before insert or update on finance."TdsChallan"
   for each row execute function finance.tds_challan_month_open();
 
+-- ---------------------------------------------------------------------------
+-- Founder expense claims & reimbursements (M14, BR-27)
+-- ---------------------------------------------------------------------------
+alter table finance."ExpenseClaim" drop constraint if exists expense_claim_shape;
+alter table finance."ExpenseClaim" add constraint expense_claim_shape check (
+  "amount" > 0 and length(trim("vendorName")) > 0 and length(trim("paidFrom")) > 0
+  and ("status" not in ('rejected', 'cancelled') or length(trim(coalesce("statusReason", ''))) > 0)
+  and ("status" not in ('approved', 'reimbursed') or ("approvedBy" is not null and "approvedBy" <> "founderUserId"))
+  and (("status" = 'reimbursed') = ("reimbursementId" is not null))
+);
+alter table finance."Reimbursement" drop constraint if exists reimbursement_shape;
+alter table finance."Reimbursement" add constraint reimbursement_shape check (
+  "amount" > 0
+  and ("status" <> 'failed' or length(trim(coalesce("statusReason", ''))) > 0)
+  and (("status" = 'reconciled') = ("bankTxnId" is not null))
+);
+
+-- An approved claim is spending already counted: its figures stay. Corrections: reject / re-claim.
+create or replace function finance.expense_claim_fixed() returns trigger
+language plpgsql as $$
+begin
+  if old."status" in ('approved', 'reimbursed') and (
+       new."amount" is distinct from old."amount" or new."expenseDate" is distinct from old."expenseDate"
+    or new."founderUserId" is distinct from old."founderUserId" or new."categoryId" is distinct from old."categoryId"
+    or new."subCategoryId" is distinct from old."subCategoryId" or new."nature" is distinct from old."nature") then
+    raise exception 'finance: this claim is approved; its amount, date and category cannot change'
+      using errcode = 'P0012';
+  end if;
+  return new;
+end $$;
+drop trigger if exists expense_claim_fixed on finance."ExpenseClaim";
+create trigger expense_claim_fixed before update on finance."ExpenseClaim"
+  for each row execute function finance.expense_claim_fixed();
+
+-- A reimbursement keeps its number, founder, amount and date; a mistake is marked failed.
+create or replace function finance.reimbursement_fixed() returns trigger
+language plpgsql as $$
+begin
+  if new."reimbursementNo" is distinct from old."reimbursementNo" or new."founderUserId" is distinct from old."founderUserId"
+     or new."amount" is distinct from old."amount" or new."paidDate" is distinct from old."paidDate" then
+    raise exception 'finance: reimbursement % is recorded; it cannot be changed, only marked failed', old."reimbursementNo"
+      using errcode = 'P0012';
+  end if;
+  return new;
+end $$;
+drop trigger if exists reimbursement_fixed on finance."Reimbursement";
+create trigger reimbursement_fixed before update on finance."Reimbursement"
+  for each row execute function finance.reimbursement_fixed();
+
+-- BR-36: no claim or reimbursement dated in a locked month.
+create or replace function finance.claim_month_open() returns trigger
+language plpgsql as $$
+declare
+  d date := case when tg_table_name = 'ExpenseClaim' then (to_jsonb(new)->>'expenseDate')::date else (to_jsonb(new)->>'paidDate')::date end;
+  o date := case when tg_op = 'INSERT' then null when tg_table_name = 'ExpenseClaim' then (to_jsonb(old)->>'expenseDate')::date else (to_jsonb(old)->>'paidDate')::date end;
+begin
+  if (tg_op = 'INSERT' or d is distinct from o) and finance.is_month_locked(new."entityId", d) then
+    raise exception 'finance: % is in a locked month; unlock it in Settings > Period lock first', d
+      using errcode = 'P0007';
+  end if;
+  return new;
+end $$;
+drop trigger if exists claim_month_open on finance."ExpenseClaim";
+create trigger claim_month_open before insert or update on finance."ExpenseClaim"
+  for each row execute function finance.claim_month_open();
+drop trigger if exists reimbursement_month_open on finance."Reimbursement";
+create trigger reimbursement_month_open before insert or update on finance."Reimbursement"
+  for each row execute function finance.claim_month_open();
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$

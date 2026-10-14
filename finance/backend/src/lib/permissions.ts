@@ -13,6 +13,7 @@ export const FINANCE_MODULES = {
     financeBills: 'Vendor bills',
     financePayments: 'Payments out',
     financeTds: 'TDS',
+    financeClaims: 'Founder expense claims',
     financeDocuments: 'Documents vault',
     financeUsers: 'Users and roles',
     financeAudit: 'Audit log',

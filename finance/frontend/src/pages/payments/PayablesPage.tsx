@@ -16,15 +16,27 @@ type DueRow = {
   msme: { level: 'day30' | 'day40' | 'breached'; limitDate: string; days: number } | null;
 };
 type Due = { rows: DueRow[]; totals: { overdue: string; thisWeek: string; later: string; msmeAtRisk: number } };
+type Overview = {
+  fy: string;
+  received: { count: number; value: string; netPayable: string };
+  paid: { count: number; amount: string };
+  outstanding: string;
+  overdue: string;
+  byStatus: { paid: number; partiallyPaid: number; unpaid: number };
+  withoutTaxInvoice: { amount: string; documents: number; toChase: number; poAdvances: string };
+  noPo: { count: number; value: string };
+  ageing: Ageing;
+  msme: { amount: string; rows: { id: string; docNumber: string; vendorName: string; msmeType: string; outstanding: string; daysSinceAcceptance: number; limitDate: string; level: 'day30' | 'day40' | 'breached' }[] };
+};
 type Ageing = {
   asOf: string; buckets: { key: string; label: string }[];
   rows: { vendorId: string; vendorName: string; buckets: Record<string, string>; advances: string; total: string }[];
   totals: { buckets: Record<string, string>; advances: string; total: string };
 };
 
-const TABS = [['due', 'Due list'], ['payments', 'Payments'], ['ageing', 'Ageing']] as const;
+const TABS = [['overview', 'Overview'], ['due', 'Due list'], ['payments', 'Payments'], ['ageing', 'Ageing']] as const;
 const GROUP_LABEL = { overdue: 'Overdue', this_week: 'Due in the next 7 days', later: 'Later' } as const;
-const MSME_TEXT = { day30: 'MSME: 30 days', day40: 'MSME: 40 days', breached: 'MSME: past 45 days' } as const;
+const MSME_TEXT = { day30: 'MSME: 30 days', day40: 'MSME: 40 days', breached: 'MSME: past the limit' } as const;
 
 function DueTab() {
   const navigate = useNavigate();
@@ -131,6 +143,59 @@ function PaymentsTab() {
   );
 }
 
+function Stat({ label, value, hint, to, tone }: { label: string; value: string; hint?: string; to?: string; tone?: 'red' | 'amber' }) {
+  const body = (
+    <Card className="p-3 h-full">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className={cn('text-lg font-semibold num', tone === 'red' && 'text-red-700', tone === 'amber' && 'text-amber-700')}>{value}</div>
+      {hint && <div className="text-xs text-gray-500">{hint}</div>}
+    </Card>
+  );
+  return to ? <Link to={to} className="block hover:opacity-90">{body}</Link> : body;
+}
+
+// F132 payables dashboard (D16-D25).
+function OverviewTab() {
+  const { data: o } = useQuery({ queryKey: ['payables-overview'], queryFn: async () => (await api.get<{ data: Overview }>('/dashboard/payables')).data.data });
+  if (!o) return <p className="text-sm text-gray-500">Loading…</p>;
+  const short = (v: string) => formatINR(v, { decimals: false });
+  return (
+    <div className="space-y-3">
+      <h2 className="text-sm font-semibold text-gray-700">FY {o.fy}</h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        <Stat label="Documents received" value={String(o.received.count)} hint="Quotes, proformas and tax invoices" to="/bills" />
+        <Stat label="Invoiced value" value={short(o.received.value)} hint={`Net payable ${short(o.received.netPayable)}`} />
+        <Stat label="Paid incl. advances" value={short(o.paid.amount)} hint={`${o.paid.count} payment(s)`} to="/payables?tab=payments" />
+        <Stat label="Invoices with no PO" value={String(o.noPo.count)} hint={short(o.noPo.value)} to="/bills" />
+      </div>
+      <h2 className="text-sm font-semibold text-gray-700 pt-1">Now</h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        <Stat label="Outstanding" value={short(o.outstanding)} hint={`${o.byStatus.unpaid} unpaid · ${o.byStatus.partiallyPaid} part paid · ${o.byStatus.paid} paid`} to="/payables?tab=due" />
+        <Stat label="Overdue" value={short(o.overdue)} tone={o.overdue !== '0.00' ? 'red' : undefined} to="/payables?tab=ageing" />
+        <Stat label="Paid with no tax invoice yet" value={short(o.withoutTaxInvoice.amount)} hint={`${o.withoutTaxInvoice.documents} document(s), ${o.withoutTaxInvoice.toChase} to chase · PO advances ${short(o.withoutTaxInvoice.poAdvances)}`} tone={o.withoutTaxInvoice.toChase > 0 ? 'amber' : undefined} to="/bills?view=chase" />
+        <Stat label="MSME exposure" value={short(o.msme.amount)} hint={`${o.msme.rows.length} bill(s) 30+ days after acceptance`} tone={o.msme.rows.length ? 'amber' : undefined} />
+      </div>
+      {o.msme.rows.length > 0 && (
+        <Card className="divide-y divide-gray-100">
+          <div className="px-3 sm:px-4 py-2 text-sm font-semibold text-gray-700">MSME: pay within 45 days of acceptance (BR-25)</div>
+          {o.msme.rows.map((r) => (
+            <Link key={r.id} to={`/bills/${r.id}`} className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2 hover:bg-gray-50/70">
+              <span className="min-w-0">
+                <span className="block font-medium text-gray-900 truncate">{r.vendorName} · {r.docNumber}</span>
+                <span className="block text-xs text-gray-500">{r.daysSinceAcceptance} days since accepted · pay by {dateLabel(r.limitDate)}</span>
+              </span>
+              <span className="text-right">
+                <span className="block num font-medium">{formatINR(r.outstanding)}</span>
+                <Chip tone={r.level === 'breached' ? 'red' : 'amber'}>{MSME_TEXT[r.level]}</Chip>
+              </span>
+            </Link>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function AgeingTab() {
   const { data } = useQuery({ queryKey: ['ap-ageing'], queryFn: async () => (await api.get<{ data: Ageing }>('/payments/ageing')).data.data });
   if (!data) return <p className="text-sm text-gray-500">Loading…</p>;
@@ -174,11 +239,11 @@ function AgeingTab() {
   );
 }
 
-// F060 due list, F065 payment log, F067 AP ageing.
+// F132 overview (D16-D25), F060 due list, F065 payment log, F067 AP ageing.
 export function PayablesPage() {
   const [params, setParams] = useSearchParams();
   const { hasPermission } = useAuth();
-  const tab = (TABS.find(([k]) => k === params.get('tab'))?.[0] ?? 'due');
+  const tab = (TABS.find(([k]) => k === params.get('tab'))?.[0] ?? 'overview');
   return (
     <div className="max-w-6xl mx-auto space-y-4">
       <PageHeader
@@ -193,6 +258,7 @@ export function PayablesPage() {
           <button key={k} onClick={() => setParams({ tab: k })} className={cn('shrink-0 px-3 py-2 text-sm border-b-2 -mb-px', tab === k ? 'border-[#0c2c55] text-[#0c2c55] font-medium' : 'border-transparent text-gray-500 hover:text-gray-800')}>{label}</button>
         ))}
       </nav>
+      {tab === 'overview' && <OverviewTab />}
       {tab === 'due' && <DueTab />}
       {tab === 'payments' && <PaymentsTab />}
       {tab === 'ageing' && <AgeingTab />}

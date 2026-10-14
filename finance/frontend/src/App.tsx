@@ -28,6 +28,11 @@ import { PayablesPage } from './pages/payments/PayablesPage';
 import { PaymentFormPage } from './pages/payments/PaymentFormPage';
 import { PaymentPage } from './pages/payments/PaymentPage';
 import { TdsPage } from './pages/tds/TdsPage';
+import { ClaimsPage } from './pages/claims/ClaimsPage';
+import { ClaimFormPage } from './pages/claims/ClaimFormPage';
+import { ClaimPage } from './pages/claims/ClaimPage';
+import { ReimbursementPage } from './pages/claims/ReimbursementPage';
+import { ForecastPage } from './pages/ForecastPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,8 +77,16 @@ function App() {
                 <Route element={<ProtectedRoute requiredModule="financeTds" requiredAction="view" />}>
                   <Route path="/tds" element={<TdsPage />} />
                 </Route>
+                <Route element={<ProtectedRoute requiredModule="financeClaims" requiredAction="view" />}>
+                  <Route path="/claims" element={<ClaimsPage />} />
+                  <Route path="/claims/new" element={<ClaimFormPage mode="new" />} />
+                  <Route path="/claims/reimbursements/:id" element={<ReimbursementPage />} />
+                  <Route path="/claims/:id" element={<ClaimPage />} />
+                  <Route path="/claims/:id/edit" element={<ClaimFormPage mode="edit" />} />
+                </Route>
                 <Route element={<ProtectedRoute requiredModule="financeHome" requiredAction="view" />}>
                   <Route path="/analytics" element={<AnalyticsPage />} />
+                  <Route path="/forecast" element={<ForecastPage />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeAudit" requiredAction="view" />}>
                   <Route path="/audit" element={<AuditPage />} />

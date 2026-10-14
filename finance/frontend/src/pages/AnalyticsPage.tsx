@@ -9,8 +9,9 @@ import { cn } from '../lib/utils';
 import { monthLabel } from './settings/api';
 
 type Kind = 'expense' | 'income' | 'capex';
+type View = 'cash' | 'accrual';
 type Pivot = {
-  fy: string; kind: Kind; months: string[]; currentMonth: string;
+  fy: string; kind: Kind; view: View; months: string[]; currentMonth: string;
   rows: { categoryId: string; name: string; values: string[]; total: string; momPercent: string | null;
     subCategories: { subCategoryId: string; name: string; values: string[]; total: string }[] }[];
   totals: string[]; grandTotal: string;
@@ -41,12 +42,15 @@ export function AnalyticsPage() {
   const [params, setParams] = useSearchParams();
   const kind = (TABS.find((t) => t.kind === params.get('kind'))?.kind ?? 'expense') as Kind;
   const fy = params.get('fy') ?? '';
+  const view: View = params.get('view') === 'accrual' ? 'accrual' : 'cash';
+  // In the accrual view a cell is bills and claims too, so it cannot open as bank rows.
+  const drill = view === 'cash';
   const [open, setOpen] = useState<Set<string>>(new Set());
   const set = (k: string, v: string) => { const n = new URLSearchParams(params); if (v) n.set(k, v); else n.delete(k); setParams(n, { replace: true }); };
 
   const { data: p, isLoading } = useQuery({
-    queryKey: ['dashboard-categories', kind, fy],
-    queryFn: async () => (await api.get<{ data: Pivot }>('/dashboard/categories', { params: { kind, fy: fy || undefined } })).data.data,
+    queryKey: ['dashboard-categories', kind, fy, view],
+    queryFn: async () => (await api.get<{ data: Pivot }>('/dashboard/categories', { params: { kind, fy: fy || undefined, view } })).data.data,
   });
 
   const ledger = (m: string | null, categoryId?: string, subCategoryId?: string) => {
@@ -68,6 +72,14 @@ export function AnalyticsPage() {
             <button key={t.kind} type="button" onClick={() => set('kind', t.kind === 'expense' ? '' : t.kind)}
               className={cn('px-3 py-1.5 text-sm rounded-md', kind === t.kind ? 'bg-[#0c2c55] text-white' : 'text-gray-700 hover:bg-gray-50')}>
               {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5" role="group" aria-label="Cash or accrual view">
+          {(['cash', 'accrual'] as const).map((v) => (
+            <button key={v} type="button" onClick={() => set('view', v === 'cash' ? '' : v)}
+              className={cn('px-3 py-1.5 text-sm rounded-md', view === v ? 'bg-[#0c2c55] text-white' : 'text-gray-700 hover:bg-gray-50')}>
+              {v === 'cash' ? 'Cash' : 'Accrual'}
             </button>
           ))}
         </div>
@@ -106,11 +118,11 @@ export function AnalyticsPage() {
                     </td>
                     {r.values.map((v, i) => (
                       <td key={i} className="text-right num px-2 py-1.5 whitespace-nowrap">
-                        {Number(v) === 0 || r.categoryId === 'none' ? cell(v) : <Link to={ledger(p.months[i], r.categoryId)} className="hover:underline">{cell(v)}</Link>}
+                        {!drill || Number(v) === 0 || r.categoryId === 'none' ? cell(v) : <Link to={ledger(p.months[i], r.categoryId)} className="hover:underline">{cell(v)}</Link>}
                       </td>
                     ))}
                     <td className="text-right num px-3 py-1.5 font-medium whitespace-nowrap">
-                      {r.categoryId === 'none' ? cell(r.total) : <Link to={ledger(null, r.categoryId)} className="hover:underline">{cell(r.total)}</Link>}
+                      {!drill || r.categoryId === 'none' ? cell(r.total) : <Link to={ledger(null, r.categoryId)} className="hover:underline">{cell(r.total)}</Link>}
                     </td>
                     <td className={cn('text-right num px-3 py-1.5', r.momPercent && Number(r.momPercent) > 0 && kind !== 'income' && 'text-red-700', r.momPercent && Number(r.momPercent) < 0 && kind !== 'income' && 'text-emerald-700')}>
                       {r.momPercent === null ? <span className="text-gray-300">–</span> : `${Number(r.momPercent) > 0 ? '+' : ''}${r.momPercent}%`}
@@ -121,7 +133,7 @@ export function AnalyticsPage() {
                       <td className="sticky left-0 bg-gray-50 pl-8 pr-3 py-1">{s.name}</td>
                       {s.values.map((v, i) => (
                         <td key={i} className="text-right num px-2 py-1 whitespace-nowrap">
-                          {Number(v) === 0 || r.categoryId === 'none' ? cell(v) : <Link to={ledger(p.months[i], r.categoryId, s.subCategoryId)} className="hover:underline">{cell(v)}</Link>}
+                          {!drill || Number(v) === 0 || r.categoryId === 'none' ? cell(v) : <Link to={ledger(p.months[i], r.categoryId, s.subCategoryId)} className="hover:underline">{cell(v)}</Link>}
                         </td>
                       ))}
                       <td className="text-right num px-3 py-1 whitespace-nowrap">{cell(s.total)}</td>
@@ -142,7 +154,11 @@ export function AnalyticsPage() {
           </table>
         </Card>
       )}
-      <p className="text-xs text-gray-500">Click a category to see its sub-categories; click an amount to open those bank rows. Ignored rows and rows waiting for review are left out.</p>
+      <p className="text-xs text-gray-500">
+        {view === 'cash'
+          ? 'Cash view: bank rows by date, plus approved founder claims on their expense date. Click a category to see its sub-categories; click an amount to open those bank rows. Ignored rows and rows waiting for review are left out.'
+          : 'Accrual view (BR-35): vendor bills on their bill date at their cost (GST left out where it can be claimed back), approved founder claims, and bank rows that do not pay a bill. A bill and the bank row that paid it count once.'}
+      </p>
     </div>
   );
 }

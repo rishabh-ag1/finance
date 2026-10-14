@@ -1216,3 +1216,87 @@ model TdsCertificate {
   @@unique([vendorId, fyLabel, quarter])
   @@schema("finance")
 }
+
+// ============================================================================
+// M14 Founder expenses & reimbursements (Phase 2)
+// ============================================================================
+
+/// Submitted -> Approved (by the other founder; receipt attached) -> Reimbursed (paid back).
+/// Rejected: not a company expense. Cancelled: withdrawn by the founder.
+enum ExpenseClaimStatus {
+  submitted
+  approved
+  reimbursed
+  rejected
+  cancelled
+
+  @@schema("finance")
+}
+
+/// F150: a company expense a founder paid from a personal account or card (BR-27).
+/// Counts as spending on its expense date once approved (cash and accrual views alike).
+model ExpenseClaim {
+  id              String             @id @default(cuid())
+  entityId        String
+  founderUserId   String
+  expenseDate     DateTime           @db.Date
+  /// Personal account or card it was paid from, e.g. "HDFC card 4417".
+  paidFrom        String
+  vendorName      String
+  description     String?
+  amount          Decimal            @db.Decimal(14, 2)
+  hasGstInvoice   Boolean            @default(false)
+  categoryId      String
+  subCategoryId   String?
+  nature          TxnNature
+  status          ExpenseClaimStatus
+  statusReason    String?
+  approvedBy      String?
+  approvedAt      DateTime?          @db.Timestamptz(6)
+  reimbursementId String?
+  createdAt       DateTime           @default(now()) @db.Timestamptz(6)
+  createdBy       String?
+  updatedAt       DateTime           @updatedAt @db.Timestamptz(6)
+  updatedBy       String?
+  reimbursement   Reimbursement?     @relation(fields: [reimbursementId], references: [id])
+
+  @@index([founderUserId, status])
+  @@index([expenseDate])
+  @@schema("finance")
+}
+
+/// Paid (number, UTR) -> Reconciled (bank row linked). Failed: the bank returned it.
+enum ReimbursementStatus {
+  paid
+  reconciled
+  failed
+
+  @@schema("finance")
+}
+
+/// F151: money paid back to a founder for one or more approved claims. Takes a PMT number.
+model Reimbursement {
+  id                String              @id @default(cuid())
+  entityId          String
+  reimbursementNo   String              @unique
+  founderUserId     String
+  amount            Decimal             @db.Decimal(14, 2)
+  paidDate          DateTime            @db.Date
+  mode              String
+  fromBankAccountId String
+  utr               String?
+  bankTxnId         String?             @unique
+  /// utr, amount_date_name or manual (BR-08).
+  matchedBy         String?
+  status            ReimbursementStatus
+  statusReason      String?
+  notes             String?
+  createdAt         DateTime            @default(now()) @db.Timestamptz(6)
+  createdBy         String?
+  updatedAt         DateTime            @updatedAt @db.Timestamptz(6)
+  updatedBy         String?
+  claims            ExpenseClaim[]
+
+  @@index([founderUserId])
+  @@schema("finance")
+}
