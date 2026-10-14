@@ -10,13 +10,23 @@ jobs:
     defaults:
       run:
         working-directory: finance
+    env:
+      # Skipped (not failed) until the Google service account secrets are added (D13 item 2);
+      # until then the sheet is updated by hand from the repo.
+      HAS_SHEET_SECRETS: ${{ secrets.SPEC_SHEET_ID != '' && secrets.GOOGLE_SERVICE_ACCOUNT_JSON != '' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - if: env.HAS_SHEET_SECRETS != 'true'
+        run: echo "::notice::SPEC_SHEET_ID / GOOGLE_SERVICE_ACCOUNT_JSON not set; sheet sync skipped (D13 item 2)."
+      - if: env.HAS_SHEET_SECRETS == 'true'
+        uses: actions/checkout@v4
+      - if: env.HAS_SHEET_SECRETS == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm ci
-      - run: npx tsx scripts/sync-spec-to-sheet.ts
+      - if: env.HAS_SHEET_SECRETS == 'true'
+        run: npm ci
+      - if: env.HAS_SHEET_SECRETS == 'true'
+        run: npx tsx scripts/sync-spec-to-sheet.ts
         env:
           SPEC_SHEET_ID: ${{ secrets.SPEC_SHEET_ID }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
