@@ -41,7 +41,7 @@
 
 - **Module:** M02
 - **Trigger:** New bank row
-- **Logic:** 1) Matches an expected item (approved payment by UTR or amount+date+party; loan EMI; TDS challan) then take that item's category. 2) Counterparty name maps to a vendor (one of its bank-statement names) or customer: link the party and take its default category ('Vendor: Saiffi Industries'). 3) Keyword rules in priority order. 4) Category last used for this counterparty. 5) Review. Store the reason ('Matched PMT-0004', 'Rule: OPT/CBDT', 'Last used for MAKENICA PRIVATE LIMITED'). A suggestion puts the row in Suggested; a person accepts it (one by one or in bulk) to make it Categorised. Own-account transfers (BR-06) are paired before the rules run and are never re-categorised. Step 1 starts in Phase 2 and step 2 with vendors (M4).
+- **Logic:** 1) Matches an expected item (approved payment by UTR or amount+date+party; loan EMI; TDS challan) then take that item's category. 2) Counterparty name maps to a vendor (one of its bank-statement names) or customer: link the party and take its default category ('Vendor: Saiffi Industries'). 3) Keyword rules in priority order. 4) Category last used for this counterparty. 5) Review. Store the reason ('Matched PMT-0004', 'Rule: OPT/CBDT', 'Last used for MAKENICA PRIVATE LIMITED'). A suggestion puts the row in Suggested; a person accepts it (one by one or in bulk) to make it Categorised. Own-account transfers (BR-06) are paired before the rules run and are never re-categorised. Step 1 starts in Phase 2 and step 2 with vendors (Phase 1).
 - **Worked example:** OPT/CBDT/... matches keyword rule 'OPT/CBDT' and becomes Tax Payment > TDS Deposit, then the app suggests the open TDS deductions of the previous month to link.
 - **Confidence:** High
 
