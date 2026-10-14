@@ -40,6 +40,8 @@ export const DOC_KIND_LABEL: Record<string, string> = {
   bill: 'Bill',
   po_pdf: 'Purchase order',
   quote: 'Quote',
+  challan: 'Challan',
+  form16a: 'Form 16A',
   other: 'Document',
 };
 
@@ -108,6 +110,19 @@ export async function recordContext(recordType: string, recordId: string): Promi
       if (!p) throw new UserError('Payment not found', 404);
       const record = p.paymentNo ?? `Request ${p.id.slice(-6)}`;
       return { fy: fyLabel(dateText(p.paidDate ?? p.requestDate)!), module: 'Payments', record, nameBase: `${record}_${p.vendor.displayName}` };
+    }
+    case 'TdsChallan': {
+      const c = await prisma.tdsChallan.findUnique({ where: { id: recordId } });
+      if (!c) throw new UserError('Challan not found', 404);
+      const record = `Challan ${c.bsrCode}-${c.challanSerial} ${dateText(c.depositDate)}`;
+      return { fy: fyLabel(dateText(c.depositDate)!), module: 'TDS', record, nameBase: record };
+    }
+    case 'TdsCertificate': {
+      const c = await prisma.tdsCertificate.findUnique({ where: { id: recordId } });
+      if (!c) throw new UserError('Certificate not found', 404);
+      const v = await prisma.vendor.findUniqueOrThrow({ where: { id: c.vendorId } });
+      const record = `Form 16A Q${c.quarter} ${c.fyLabel} ${v.displayName}`;
+      return { fy: c.fyLabel, module: 'TDS', record, nameBase: record };
     }
     default:
       throw new UserError(`Files cannot be attached to ${recordType}`);

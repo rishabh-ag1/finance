@@ -6,6 +6,7 @@ import { dateText, parseDate } from '../lib/dates';
 import { fyMonths, fyRange, monthStart, todayIST } from '../lib/fy';
 import { Decimal, moneyText } from '../lib/money';
 import { missingDocuments } from './missingDocs.service';
+import { payable as tdsPayable } from './tds.service';
 
 /**
  * M12 dashboards, Phase 1 slice: F130 home (D01-D06, D10, D38) and F131 category x month
@@ -118,6 +119,8 @@ export async function home(opts: { asOf?: string; accountIds?: string[] } = {}) 
     .map((a) => ({ id: a.id, name: `${a.bankName} ${a.accountNumberMasked}`, lastImportedAt: a.lastImportedAt }));
   const missing = await missingDocuments();
   const pendingBankApprovals = await prisma.vendorBankAccount.count({ where: { status: 'pending' } });
+  // D09: TDS deducted and not yet deposited, by month, with its due date (BR-13).
+  const tdsToDeposit = (await tdsPayable()).map((m) => ({ month: m.month, amount: m.amount, dueDate: m.dueDate, overdue: m.overdue }));
 
   return {
     asOf,
@@ -138,6 +141,7 @@ export async function home(opts: { asOf?: string; accountIds?: string[] } = {}) 
       staleStatements,
       missingDocuments: missing.count,
       pendingBankApprovals,
+      tdsToDeposit,
     },
   };
 }

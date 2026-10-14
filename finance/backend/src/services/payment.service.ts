@@ -10,6 +10,7 @@ import { suggestTds, type TdsSuggestion } from '../lib/tds';
 import { DOC_STATUS_LABEL, DOC_TYPE_LABEL, refreshDocAmounts, refreshPoBilling } from './bill.service';
 import { takeNumber } from './numbering.service';
 import { getCompany } from './settings.service';
+import { syncPaymentTds } from './tds.service';
 import { bankRecentlyChanged } from './vendor.service';
 
 /**
@@ -264,6 +265,7 @@ export async function recordPaid(ctx: AuditContext, id: string, r: RecordInput) 
     const paymentNo = await takeNumber(tx, p.entityId, 'payment', paidDate);
     await tx.paymentOut.update({ where: { id }, data: { paymentNo, status: 'paid', paidDate: parseDate(paidDate), mode: r.mode, fromBankAccountId: account.id, utr, paidBy: ctx.userId, paidAt: new Date() } });
     await settle(tx, id);
+    await syncPaymentTds(tx, id);
     await matchToStatement(tx, id);
   });
   return getPayment(id);
@@ -304,6 +306,7 @@ export async function markFailed(ctx: AuditContext, id: string) {
     await tx.paymentOut.update({ where: { id }, data: { status: 'failed', statusReason: ctx.reason, bankTxnId: null, matchedBy: null } });
     await tx.paymentAllocation.updateMany({ where: { paymentId: id, isArchived: false }, data: { isArchived: true } });
     await settle(tx, id);
+    await syncPaymentTds(tx, id);
   });
   return getPayment(id);
 }

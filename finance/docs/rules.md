@@ -105,15 +105,15 @@
 
 - **Module:** M07
 - **Trigger:** Daily
-- **Logic:** TDS deducted in a month is due by the 7th of the next month; deductions in March are due by 30 April. Dashboard shows amount and days left. Late deposit: interest per month or part month at the rate in settings (1.5% for deducted-not-deposited).
-- **Worked example:** Saiffi deducted 24 Jul, deposited 5 Aug (on time). Micro Instruments deducted 19 Aug, deposited 7 Sep (on the due date).
+- **Logic:** TDS deducted in a month is due by the 7th of the next month; deductions in March are due by 30 April. Dashboard shows amount and days left. Late deposit: interest per month or part month at the rate in settings (1.5% for deducted-not-deposited). In the app: counted in calendar months from the month of deduction to the month of deposit (as TRACES does, [Verify]); nothing when deposited by the due date; the rate is in Company settings.
+- **Worked example:** Saiffi deducted 24 Jul, deposited 5 Aug (on time). Micro Instruments deducted 19 Aug, deposited 7 Sep (on the due date). Had Saiffi's ₹19,600 been deposited on 8 Aug: July and August = 2 months x 1.5% = ₹588 interest.
 - **Confidence:** High on dates. [Verify] interest rate under new Act.
 
 ## BR-14 - Challan matching
 
 - **Module:** M07
 - **Trigger:** Challan recorded or OPT/CBDT bank row imported
-- **Logic:** Challan amount = sum of linked deductions + interest + fee. Linked deductions move to Deposited. Bank row with OPT/CBDT and same amount and date is linked to the challan.
+- **Logic:** Challan amount = sum of linked deductions + interest + fee. Linked deductions move to Deposited. Bank row with OPT/CBDT and same amount and date is linked to the challan. In the app: one challan pays one section (ITNS 281); the OPT/CBDT row of the challan total within 3 days links by itself when only one fits; an OPT/CBDT row with no challan suggests one open deduction of exactly its amount, else all open deductions of one month when they add up to it.
 - **Worked example:** 7 Sep: three challans ₹1,080 (Valco), ₹5,812 (Micro Instruments), ₹1,700 (VideAim), each matched to one deduction.
 - **Confidence:** High
 

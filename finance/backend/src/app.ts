@@ -13,6 +13,7 @@ import dashboardRoutes from './routes/dashboard.routes';
 import purchaseRoutes from './routes/purchase.routes';
 import billRoutes from './routes/bill.routes';
 import paymentRoutes from './routes/payment.routes';
+import tdsRoutes from './routes/tds.routes';
 import { DeleteRefusedError, refuseDelete } from './lib/audit';
 import { UserError } from './lib/http';
 
@@ -48,6 +49,7 @@ export function createApp() {
     app.use('/api/purchases', purchaseRoutes);
     app.use('/api/bills', billRoutes);
     app.use('/api/payments', paymentRoutes);
+    app.use('/api/tds', tdsRoutes);
 
     // No hard deletes anywhere (BR-43, A9): every DELETE is refused and leaves an audit row.
     app.delete('/api/:resource/:id', async (req: Request, res: Response, next: NextFunction) => {
@@ -69,6 +71,11 @@ export function createApp() {
         const ruleMessage = (error instanceof Error ? error.message : String(error)).match(/finance: ([^"\\\n]+)/)?.[1];
         if (ruleMessage) {
             res.status(409).json({ success: false, error: ruleMessage.charAt(0).toUpperCase() + ruleMessage.slice(1) });
+            return;
+        }
+        // A unique key in the database refused a second copy of something.
+        if ((error as { code?: string })?.code === 'P2002') {
+            res.status(409).json({ success: false, error: 'This is already recorded (same number or key). Check the existing entry.' });
             return;
         }
         console.error('Unhandled error:', error);

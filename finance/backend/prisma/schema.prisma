@@ -108,6 +108,8 @@ model Company {
   incorporationDate DateTime? @db.Date
   /// BR-10: advances without a tax invoice older than this many days go on the chase list.
   taxInvoiceChaseDays Int     @default(15) @db.SmallInt
+  /// BR-13: late interest on TDS deducted but not deposited, % per month or part ([Verify]).
+  tdsLateInterestRate Decimal @default(1.5) @db.Decimal(5, 2)
   email             String?
   phone             String?
   logoFileId        String?
@@ -1095,5 +1097,122 @@ model PaymentAllocation {
   @@index([docId])
   @@index([poId])
   @@index([appliedToDocId])
+  @@schema("finance")
+}
+
+// ============================================================================
+// M07 TDS tracker (Phase 2)
+// ============================================================================
+
+/// Deducted (computed) -> Deposited (challan linked) -> Return filed -> Certificate issued.
+enum TdsEntryStatus {
+  deducted
+  deposited
+  return_filed
+  certificate_issued
+  cancelled
+
+  @@schema("finance")
+}
+
+/// One TDS deduction (BR-11), kept in step with its source: a tax invoice's TDS (bill), or the TDS
+/// deducted on an advance when it was paid (advance = a PaymentAllocation).
+model TdsEntry {
+  id            String         @id @default(cuid())
+  entityId      String
+  /// bill | advance
+  sourceType    String
+  sourceId      String
+  vendorId      String
+  pan           String?
+  deducteeType  DeducteeType
+  sectionId     String
+  deductionDate DateTime       @db.Date
+  baseAmount    Decimal        @db.Decimal(14, 2)
+  rate          Decimal        @db.Decimal(5, 2)
+  tdsAmount     Decimal        @db.Decimal(14, 2)
+  /// First day of the month of deduction.
+  month         DateTime       @db.Date
+  quarter       Int            @db.SmallInt
+  fyLabel       String
+  status        TdsEntryStatus @default(deducted)
+  statusReason  String?
+  challanId     String?
+  returnId      String?
+  certificateId String?
+  createdAt     DateTime       @default(now()) @db.Timestamptz(6)
+  createdBy     String?
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(6)
+  updatedBy     String?
+  challan       TdsChallan?    @relation(fields: [challanId], references: [id])
+
+  @@unique([sourceType, sourceId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([fyLabel, quarter])
+  @@schema("finance")
+}
+
+/// A TDS deposit (ITNS 281) with its deductions (BR-14), linked to the OPT/CBDT bank row.
+model TdsChallan {
+  id            String     @id @default(cuid())
+  entityId      String
+  /// Challan serial number (CIN = BSR code + date + serial).
+  challanSerial String
+  bsrCode       String
+  depositDate   DateTime   @db.Date
+  sectionId     String
+  tdsAmount     Decimal    @db.Decimal(14, 2)
+  interest      Decimal    @default(0) @db.Decimal(14, 2)
+  fee           Decimal    @default(0) @db.Decimal(14, 2)
+  total         Decimal    @db.Decimal(14, 2)
+  bankTxnId     String?    @unique
+  isCancelled   Boolean    @default(false)
+  statusReason  String?
+  notes         String?
+  createdAt     DateTime   @default(now()) @db.Timestamptz(6)
+  createdBy     String?
+  updatedAt     DateTime   @updatedAt @db.Timestamptz(6)
+  updatedBy     String?
+  entries       TdsEntry[]
+
+  @@unique([bsrCode, depositDate, challanSerial])
+  @@schema("finance")
+}
+
+/// F073: a quarterly TDS return (26Q) marked filed by the CA.
+model TdsReturn {
+  id        String   @id @default(cuid())
+  entityId  String
+  fyLabel   String
+  quarter   Int      @db.SmallInt
+  form      String   @default("26Q")
+  filedOn   DateTime @db.Date
+  ackNo     String
+  notes     String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  createdBy String?
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy String?
+
+  @@unique([fyLabel, quarter, form])
+  @@schema("finance")
+}
+
+/// F074: Form 16A given to a vendor for a quarter (the PDF is an attachment).
+model TdsCertificate {
+  id            String   @id @default(cuid())
+  entityId      String
+  vendorId      String
+  fyLabel       String
+  quarter       Int      @db.SmallInt
+  certificateNo String?
+  issuedOn      DateTime @db.Date
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  createdBy     String?
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy     String?
+
+  @@unique([vendorId, fyLabel, quarter])
   @@schema("finance")
 }

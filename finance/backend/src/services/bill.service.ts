@@ -12,6 +12,7 @@ import { suggestTds, type TdsSuggestion } from '../lib/tds';
 import { presentKinds } from './attachment.service';
 import { refreshPoStatus } from './po.service';
 import { getCompany } from './settings.service';
+import { syncBillTds } from './tds.service';
 import { bankRecentlyChanged } from './vendor.service';
 
 /**
@@ -371,6 +372,7 @@ export async function createBill(ctx: AuditContext, input: BillInput) {
     }
     await refreshDocAmounts(tx, d.id);
     if (header.poId) await refreshPoBilling(tx, header.poId);
+    await syncBillTds(tx, d.id);
     return d;
   });
   return { ...(await getBill(doc.id)), saveWarnings: warnings };
@@ -394,6 +396,7 @@ export async function updateBill(ctx: AuditContext, id: string, input: BillInput
     await replaceLines(tx, id, lines);
     await refreshDocAmounts(tx, id);
     for (const poId of new Set([old.poId, header.poId].filter(Boolean) as string[])) await refreshPoBilling(tx, poId);
+    await syncBillTds(tx, id);
   });
   return { ...(await getBill(id)), saveWarnings: warnings };
 }
@@ -456,6 +459,7 @@ export async function cancelBill(ctx: AuditContext, id: string) {
     }
     if (d.againstDocumentId) await refreshDocAmounts(tx, d.againstDocumentId);
     if (d.poId) await refreshPoBilling(tx, d.poId);
+    await syncBillTds(tx, id);
   });
   return getBill(id);
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
 import {
-  Banknote, ChartColumn, ClipboardList, FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings, Tags, Truck, Upload, UserRound, Wand2,
+  Banknote, ChartColumn, Percent, ClipboardList, FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings, Tags, Truck, Upload, UserRound, Wand2,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../context/auth';
@@ -32,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/purchase-orders', label: 'Purchase orders', icon: ClipboardList, module: 'financePurchases' },
   { to: '/bills', label: 'Vendor bills', icon: ReceiptText, module: 'financeBills' },
   { to: '/payables', label: 'Payables', icon: Banknote, module: 'financePayments' },
+  { to: '/tds', label: 'TDS', icon: Percent, module: 'financeTds' },
   { to: '/documents', label: 'Documents', icon: FileText, module: 'financeDocuments' },
   { to: '/categories', label: 'Categories', icon: Tags, module: 'financeSettings' },
   { to: '/settings', label: 'Settings', icon: Settings, module: 'financeSettings' },

@@ -22,7 +22,7 @@ type Home = {
   capex: { thisMonth: string; fy: string };
   funding: { fy: string; bySubCategory: { name: string; amount: string }[] };
   months: Month[];
-  actions: { review: number; uncategorisedLastThree: number; staleStatements: { id: string; name: string; lastImportedAt: string | null }[]; missingDocuments: number; pendingBankApprovals: number };
+  actions: { review: number; uncategorisedLastThree: number; staleStatements: { id: string; name: string; lastImportedAt: string | null }[]; missingDocuments: number; pendingBankApprovals: number; tdsToDeposit: { month: string; amount: string; dueDate: string; overdue: boolean }[] };
 };
 
 const short = (v: string) => formatINR(v, { decimals: false });
@@ -60,6 +60,7 @@ export function HomePage() {
     h.actions.staleStatements.length > 3 && { text: `${h.actions.staleStatements.length} accounts have no statement imported in the last 7 days`, to: '/import' },
     ...(h.actions.staleStatements.length > 3 ? [] : h.actions.staleStatements).map((s) => ({ text: `${s.name}: no statement imported ${s.lastImportedAt ? `since ${formatDateTime(s.lastImportedAt)}` : 'yet'}`, to: '/import' })),
     h.actions.pendingBankApprovals > 0 && { text: `${h.actions.pendingBankApprovals} vendor bank change(s) waiting for approval`, to: '/vendors' },
+    ...h.actions.tdsToDeposit.map((t) => ({ text: `TDS of ${monthLabel(t.month)}: ${formatINR(t.amount)} ${t.overdue ? 'was due' : 'due'} ${monthLabel(t.dueDate.slice(0, 8) + '01').replace(/^\w+/, (m) => `${Number(t.dueDate.slice(8))} ${m}`)}`, to: '/tds' })),
     h.actions.missingDocuments > 0 && { text: `${h.actions.missingDocuments} record(s) missing documents`, to: '/documents' },
   ].filter(Boolean) as { text: string; to: string }[];
 

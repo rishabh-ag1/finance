@@ -27,6 +27,7 @@ import { BillPage } from './pages/bills/BillPage';
 import { PayablesPage } from './pages/payments/PayablesPage';
 import { PaymentFormPage } from './pages/payments/PaymentFormPage';
 import { PaymentPage } from './pages/payments/PaymentPage';
+import { TdsPage } from './pages/tds/TdsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,6 +68,9 @@ function App() {
                   <Route path="/payments/new" element={<PaymentFormPage mode="new" />} />
                   <Route path="/payments/:id" element={<PaymentPage />} />
                   <Route path="/payments/:id/edit" element={<PaymentFormPage mode="edit" />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeTds" requiredAction="view" />}>
+                  <Route path="/tds" element={<TdsPage />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeHome" requiredAction="view" />}>
                   <Route path="/analytics" element={<AnalyticsPage />} />

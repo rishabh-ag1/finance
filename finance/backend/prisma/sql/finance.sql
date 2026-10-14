@@ -475,6 +475,55 @@ drop trigger if exists payment_month_open on finance."PaymentOut";
 create trigger payment_month_open before insert or update on finance."PaymentOut"
   for each row execute function finance.payment_month_open();
 
+-- ---------------------------------------------------------------------------
+-- TDS tracker (M07)
+-- ---------------------------------------------------------------------------
+alter table finance."TdsEntry" drop constraint if exists tds_entry_shape;
+alter table finance."TdsEntry" add constraint tds_entry_shape check (
+  "sourceType" in ('bill', 'advance') and "tdsAmount" >= 0 and "baseAmount" >= 0 and "quarter" between 1 and 4
+  and (("status" = 'deducted' or "status" = 'cancelled') or "challanId" is not null)
+  and ("status" not in ('return_filed', 'certificate_issued') or "returnId" is not null)
+  and ("status" <> 'certificate_issued' or "certificateId" is not null)
+);
+alter table finance."TdsChallan" drop constraint if exists tds_challan_shape;
+alter table finance."TdsChallan" add constraint tds_challan_shape check (
+  "total" = "tdsAmount" + "interest" + "fee" and "tdsAmount" > 0 and "interest" >= 0 and "fee" >= 0
+  and length(trim("challanSerial")) > 0 and length(trim("bsrCode")) > 0
+  and (not "isCancelled" or length(trim(coalesce("statusReason", ''))) > 0)
+);
+
+-- A deposited deduction keeps its figures: the government already has the money.
+create or replace function finance.tds_entry_deposited_fixed() returns trigger
+language plpgsql as $$
+begin
+  if old."status" in ('deposited', 'return_filed', 'certificate_issued')
+     and (new."tdsAmount" is distinct from old."tdsAmount" or new."baseAmount" is distinct from old."baseAmount"
+       or new."sectionId" is distinct from old."sectionId" or new."deductionDate" is distinct from old."deductionDate"
+       or new."vendorId" is distinct from old."vendorId" or new."status" = 'cancelled') then
+    raise exception 'finance: this TDS is already deposited (challan); it cannot change here, correct it with the CA'
+      using errcode = 'P0011';
+  end if;
+  return new;
+end $$;
+drop trigger if exists tds_entry_deposited_fixed on finance."TdsEntry";
+create trigger tds_entry_deposited_fixed before update on finance."TdsEntry"
+  for each row execute function finance.tds_entry_deposited_fixed();
+
+-- BR-36: no challan recorded or re-dated in a locked month.
+create or replace function finance.tds_challan_month_open() returns trigger
+language plpgsql as $$
+begin
+  if (tg_op = 'INSERT' or new."depositDate" is distinct from old."depositDate")
+     and finance.is_month_locked(new."entityId", new."depositDate") then
+    raise exception 'finance: % is in a locked month; unlock it in Settings > Period lock first', new."depositDate"
+      using errcode = 'P0007';
+  end if;
+  return new;
+end $$;
+drop trigger if exists tds_challan_month_open on finance."TdsChallan";
+create trigger tds_challan_month_open before insert or update on finance."TdsChallan"
+  for each row execute function finance.tds_challan_month_open();
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$
