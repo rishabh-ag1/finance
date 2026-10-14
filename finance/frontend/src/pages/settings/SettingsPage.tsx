@@ -8,6 +8,7 @@ import { SeriesTab } from './SeriesTab';
 import { TermsTab } from './TermsTab';
 import { PeriodLockTab } from './PeriodLockTab';
 import { PurchasingTab } from './PurchasingTab';
+import { OrderToBankTab } from './OrderToBankTab';
 
 const TABS = [
   { key: 'company', label: 'Company & FY', body: CompanyTab },
@@ -16,6 +17,7 @@ const TABS = [
   { key: 'series', label: 'Numbering', body: SeriesTab },
   { key: 'terms', label: 'Terms & approvals', body: TermsTab },
   { key: 'purchasing', label: 'Purchasing', body: PurchasingTab },
+  { key: 'orders', label: 'Order-to-bank', body: OrderToBankTab },
   { key: 'locks', label: 'Period lock', body: PeriodLockTab },
 ] as const;
 

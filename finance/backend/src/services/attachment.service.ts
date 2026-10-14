@@ -125,6 +125,13 @@ export async function recordContext(recordType: string, recordId: string): Promi
       const record = `Form 16A Q${c.quarter} ${c.fyLabel} ${v.displayName}`;
       return { fy: c.fyLabel, module: 'TDS', record, nameBase: record };
     }
+    case 'ReconImport': {
+      const i = await prisma.reconImport.findUnique({ where: { id: recordId } });
+      if (!i) throw new UserError('Import not found', 404);
+      const day = dateText(i.createdAt)!;
+      const record = `${i.source === 'razorpay' ? 'Razorpay' : 'Shiprocket'} ${i.kind} ${day}`;
+      return { fy: fyLabel(day), module: 'Order-to-bank', record, nameBase: record };
+    }
     case 'ExpenseClaim': {
       const c = await prisma.expenseClaim.findUnique({ where: { id: recordId } });
       if (!c) throw new UserError('Claim not found', 404);

@@ -11,6 +11,7 @@ import { payable as tdsPayable } from './tds.service';
 import { balances as founderBalances } from './claim.service';
 import { apAgeing, dueList } from './payment.service';
 import { chaseList } from './bill.service';
+import { moneyInTransit, openDiscrepancyCount } from './recon.service';
 import { forecastWeeks, weekIndex } from '../lib/forecast';
 import { daysOverdue, msmeAlert } from '../lib/payables';
 
@@ -169,6 +170,15 @@ export async function home(opts: { asOf?: string; accountIds?: string[] } = {}) 
   const due = await dueList();
   const founders = (await founderBalances()).filter((f) => new Decimal(f.owed ?? 0).greaterThan(0) || new Decimal(f.waiting ?? 0).greaterThan(0));
   const claimsToApprove = await prisma.expenseClaim.count({ where: { status: 'submitted' } });
+  // F130 / F197: money paid by customers and not yet in the bank, and open order-to-bank mismatches.
+  let orderToBank: { inTransit: string | null; overdue: number; openDiscrepancies: number } | null = null;
+  try {
+    const t = await moneyInTransit();
+    const overdue = [t.paidAtGateway, t.deliveredAwaitingRemittance, t.settledNotInBank, t.remittedNotInBank].reduce((n, x) => n + x.overdue, 0);
+    orderToBank = { inTransit: t.total, overdue, openDiscrepancies: await openDiscrepancyCount() };
+  } catch (error) {
+    console.error('Order-to-bank figures left out of Home:', error);
+  }
 
   return {
     asOf,
@@ -185,6 +195,7 @@ export async function home(opts: { asOf?: string; accountIds?: string[] } = {}) 
     months: months.map(figuresView),
     payables: { overdue: due.totals.overdue, dueThisWeek: due.totals.thisWeek, msmeAtRisk: due.totals.msmeAtRisk },
     founders,
+    orderToBank,
     actions: {
       claimsToApprove,
       review,
@@ -338,14 +349,15 @@ async function businessCash(asOf: string) {
   return cash;
 }
 
-type ForecastItem = { week: number; kind: 'bill' | 'advance' | 'tds' | 'claims' | 'regular'; label: string; date: string | null; amount: Decimal; link: string | null };
+type ForecastItem = { week: number; kind: 'bill' | 'advance' | 'tds' | 'claims' | 'regular' | 'receipt'; label: string; date: string | null; amount: Decimal; link: string | null };
 
 /**
  * D33: opening cash, then each week's expected payments. Dated items fall in their week (anything
  * already due, or with no date, in week 1). Spending that has no bill (salaries, rent,
  * subscriptions) is the weekly average of the last 3 complete months of operating bank outflows
- * that did not pay a bill. Customer receipts (Phase 3 invoices), loan EMIs (Phase 3) and PO
- * milestones (not dated) are not in the weeks yet; open POs are shown beside them.
+ * that did not pay a bill. Receipts: money in transit from customers (M18, F197) on its expected
+ * bank date. Invoice receipts (Phase 3), loan EMIs (Phase 3) and PO milestones (not dated) are
+ * not in the weeks yet; open POs are shown beside them.
  */
 export async function forecast(opts: { asOf?: string } = {}) {
   const today = opts.asOf ?? todayIST();
@@ -361,6 +373,12 @@ export async function forecast(opts: { asOf?: string } = {}) {
   }
   for (const m of await tdsPayable()) add(m.dueDate, { kind: 'tds', label: `TDS for ${m.month.slice(0, 7)}`, amount: new Decimal(m.amount ?? 0), link: '/tds' });
   for (const f of await founderBalances()) add(null, { kind: 'claims', label: `Owed to ${f.founderName}`, amount: new Decimal(f.owed ?? 0), link: '/claims' });
+  // F197 feeds the forecast: Razorpay and COD money on its way, by expected bank date.
+  try {
+    for (const x of (await moneyInTransit()).expected) add(x.date, { kind: 'receipt', label: x.label, amount: new Decimal(x.amount ?? 0), link: '/order-to-bank' });
+  } catch (error) {
+    console.error('Order-to-bank figures left out of the forecast:', error);
+  }
 
   // Regular spending without a bill: weekly average over the last 3 complete months (13 weeks).
   const lastThree = lastCompleteMonths(today);
@@ -378,11 +396,12 @@ export async function forecast(opts: { asOf?: string } = {}) {
   let running = opening;
   const rows = weeks.map((w, i) => {
     const these = items.filter((x) => x.week === i);
-    const out = these.reduce((s, x) => s.plus(x.amount), new Decimal(0));
+    const inflow = these.filter((x) => x.kind === 'receipt').reduce((s, x) => s.plus(x.amount), new Decimal(0));
+    const out = these.filter((x) => x.kind !== 'receipt').reduce((s, x) => s.plus(x.amount), new Decimal(0));
     const start = running;
-    running = running.minus(out);
+    running = running.plus(inflow).minus(out);
     return {
-      ...w, opening: moneyText(start), receipts: '0.00', payments: moneyText(out), closing: moneyText(running),
+      ...w, opening: moneyText(start), receipts: moneyText(inflow), payments: moneyText(out), closing: moneyText(running),
       items: these.map((x) => ({ kind: x.kind, label: x.label, date: x.date, amount: moneyText(x.amount), link: x.link })),
     };
   });
@@ -399,7 +418,7 @@ export async function forecast(opts: { asOf?: string } = {}) {
     firstShortWeek: firstShort ? firstShort.from : null,
     notIncluded: {
       openPurchaseOrders: { count: openPos.length, unbilled: moneyText(poUnbilled) },
-      receipts: 'Customer receipts come with invoicing (Phase 3)',
+      receipts: 'Receipts against invoices (HoReCa, B2B) come with invoicing (Phase 3)',
       loans: 'Loan EMIs come with the loans module (Phase 3)',
     },
   };

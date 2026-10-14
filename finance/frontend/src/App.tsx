@@ -33,6 +33,9 @@ import { ClaimFormPage } from './pages/claims/ClaimFormPage';
 import { ClaimPage } from './pages/claims/ClaimPage';
 import { ReimbursementPage } from './pages/claims/ReimbursementPage';
 import { ForecastPage } from './pages/ForecastPage';
+import { OrderToBankPage } from './pages/orders/OrderToBankPage';
+import { OrderPage } from './pages/orders/OrderPage';
+import { SettlementPage } from './pages/orders/SettlementPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,6 +79,11 @@ function App() {
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeTds" requiredAction="view" />}>
                   <Route path="/tds" element={<TdsPage />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeOrders" requiredAction="view" />}>
+                  <Route path="/order-to-bank" element={<OrderToBankPage />} />
+                  <Route path="/order-to-bank/orders/:id" element={<OrderPage />} />
+                  <Route path="/order-to-bank/settlements/:id" element={<SettlementPage />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeClaims" requiredAction="view" />}>
                   <Route path="/claims" element={<ClaimsPage />} />

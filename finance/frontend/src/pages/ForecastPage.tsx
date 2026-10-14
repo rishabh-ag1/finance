@@ -8,7 +8,7 @@ import { formatINR } from '../lib/money';
 import { cn } from '../lib/utils';
 import { dateLabel } from './settings/api';
 
-type Item = { kind: 'bill' | 'advance' | 'tds' | 'claims' | 'regular'; label: string; date: string | null; amount: string; link: string | null };
+type Item = { kind: 'bill' | 'advance' | 'tds' | 'claims' | 'regular' | 'receipt'; label: string; date: string | null; amount: string; link: string | null };
 type Week = { from: string; to: string; opening: string; receipts: string; payments: string; closing: string; items: Item[] };
 type Forecast = {
   asOf: string; openingCash: string; regularWeekly: string; regularBasis: { from: string; to: string; total: string };
@@ -16,7 +16,7 @@ type Forecast = {
   notIncluded: { openPurchaseOrders: { count: number; unbilled: string }; receipts: string; loans: string };
 };
 
-const KIND_LABEL: Record<Item['kind'], string> = { bill: 'Bill', advance: 'Advance', tds: 'TDS', claims: 'Founder', regular: 'Regular' };
+const KIND_LABEL: Record<Item['kind'], string> = { bill: 'Bill', advance: 'Advance', tds: 'TDS', claims: 'Founder', regular: 'Regular', receipt: 'In' };
 const short = (v: string) => formatINR(v, { decimals: false });
 const day = (d: string) => dateLabel(d).replace(/ \d{4}$/, '');
 
@@ -30,7 +30,7 @@ export function ForecastPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
-      <PageHeader title="Cash forecast" subtitle="The next 13 weeks: today's cash less what is due each week. Anything already overdue is in this week." />
+      <PageHeader title="Cash forecast" subtitle="The next 13 weeks: today's cash, plus customer money on its way, less what is due each week. Anything already overdue is in this week." />
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <Card className="p-3"><div className="text-xs text-gray-500">Cash today</div><div className="text-lg font-semibold num">{short(f.openingCash)}</div></Card>
         <Card className="p-3"><div className="text-xs text-gray-500">After 13 weeks</div><div className={cn('text-lg font-semibold num', negative(f.closingCash) && 'text-red-700')}>{short(f.closingCash)}</div></Card>
@@ -42,11 +42,12 @@ export function ForecastPage() {
 
       <Card className="overflow-hidden">
         <table className="w-full table-fixed text-xs sm:text-sm">
-          <colgroup><col /><col className="w-24 sm:w-32" /><col className="w-24 sm:w-36" /></colgroup>
+          <colgroup><col /><col className="w-20 sm:w-28" /><col className="w-20 sm:w-28" /><col className="w-24 sm:w-36" /></colgroup>
           <thead className="bg-gray-50 text-gray-600">
             <tr>
               <th className="text-left font-medium px-3 py-2">Week</th>
-              <th className="text-right font-medium px-2 py-2">Payments</th>
+              <th className="text-right font-medium px-2 py-2">In</th>
+              <th className="text-right font-medium px-2 py-2">Out</th>
               <th className="text-right font-medium px-3 py-2">Cash left</th>
             </tr>
           </thead>
@@ -60,6 +61,7 @@ export function ForecastPage() {
                       <span>{day(w.from)} – {day(w.to)}{i === 0 && <span className="block text-gray-500">this week, and overdue</span>}</span>
                     </button>
                   </td>
+                  <td className="text-right num px-2 py-1.5 whitespace-nowrap text-emerald-700">{w.receipts === '0.00' ? <span className="text-gray-300">–</span> : short(w.receipts)}</td>
                   <td className="text-right num px-2 py-1.5 whitespace-nowrap">{w.payments === '0.00' ? <span className="text-gray-300">–</span> : short(w.payments)}</td>
                   <td className={cn('text-right num px-3 py-1.5 font-medium whitespace-nowrap', negative(w.closing) && 'text-red-700')}>{short(w.closing)}</td>
                 </tr>
@@ -70,7 +72,8 @@ export function ForecastPage() {
                       {it.link ? <Link to={it.link} className="hover:underline">{it.label}</Link> : it.label}
                       {it.date && <span className="text-gray-400"> · due {dateLabel(it.date)}</span>}
                     </td>
-                    <td className="text-right num px-2 py-1 whitespace-nowrap">{short(it.amount)}</td>
+                    <td className="text-right num px-2 py-1 whitespace-nowrap text-emerald-700">{it.kind === 'receipt' ? short(it.amount) : ''}</td>
+                    <td className="text-right num px-2 py-1 whitespace-nowrap">{it.kind === 'receipt' ? '' : short(it.amount)}</td>
                     <td />
                   </tr>
                 ))}
@@ -81,7 +84,7 @@ export function ForecastPage() {
       </Card>
 
       <Card className="p-3 sm:p-4 text-xs text-gray-600 space-y-1">
-        <p><span className="font-medium text-gray-800">How it is worked out.</span> Bills and advances fall in the week they are due; TDS by its deposit date; what is owed to founders in this week. Regular spending is spending with no bill (salaries, rent, subscriptions): the weekly average of {dateLabel(f.regularBasis.from)} to {dateLabel(f.regularBasis.to)} ({short(f.regularBasis.total)} over 13 weeks).</p>
+        <p><span className="font-medium text-gray-800">How it is worked out.</span> Bills and advances fall in the week they are due; TDS by its deposit date; what is owed to founders in this week. Money in: Razorpay payments, COD delivered and settlements not yet in the bank, on the day each is expected in the bank (Order-to-bank). Regular spending is spending with no bill (salaries, rent, subscriptions): the weekly average of {dateLabel(f.regularBasis.from)} to {dateLabel(f.regularBasis.to)} ({short(f.regularBasis.total)} over 13 weeks).</p>
         <p><span className="font-medium text-gray-800">Not in the weeks yet.</span> {f.notIncluded.receipts}. {f.notIncluded.loans}. {f.notIncluded.openPurchaseOrders.count > 0 ? `${f.notIncluded.openPurchaseOrders.count} open purchase order(s) with ${short(f.notIncluded.openPurchaseOrders.unbilled)} not yet billed or paid in advance have no dates, so they are left out.` : 'No open purchase orders.'}</p>
       </Card>
     </div>

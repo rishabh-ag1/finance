@@ -1,8 +1,7 @@
-import { parse as parseCsv } from 'csv-parse/sync';
-import ExcelJS from 'exceljs';
 import { UserError } from '../../lib/http';
 import { isoDate } from '../../lib/fy';
 import { Decimal } from '../../lib/money';
+import { readTableFile, type Cell } from '../../lib/tableFile';
 
 /**
  * F010 Statement upload: reads an IDFC statement export (CSV or XLSX) into rows.
@@ -28,8 +27,6 @@ export type StatementFile = {
   /** Account number found above the table, if any (digits only). */
   accountNumber: string | null;
 };
-
-type Cell = string | number | Date | null | undefined;
 
 const MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
 
@@ -122,31 +119,9 @@ export function rowsFromTable(table: Cell[][]): StatementFile {
 }
 
 export async function readStatementFile(fileName: string, content: Buffer): Promise<StatementFile> {
-  const lower = fileName.toLowerCase();
-  if (lower.endsWith('.csv')) {
-    const table = parseCsv(content.toString('utf8').replace(/^﻿/, ''), { relax_column_count: true, skip_empty_lines: true }) as string[][];
-    return rowsFromTable(table);
-  }
-  if (lower.endsWith('.xlsx')) {
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(content as unknown as ArrayBuffer);
-    const sheet = wb.worksheets[0];
-    if (!sheet) throw new UserError('The workbook has no sheets');
-    const table: Cell[][] = [];
-    sheet.eachRow({ includeEmpty: false }, (row) => {
-      const values = (row.values as Cell[]).slice(1).map((v) => {
-        if (v && typeof v === 'object' && !(v instanceof Date)) {
-          const o = v as { text?: string; result?: Cell; richText?: { text: string }[] };
-          return o.richText ? o.richText.map((t) => t.text).join('') : o.text ?? o.result ?? '';
-        }
-        return v;
-      });
-      table.push(values);
-    });
-    return rowsFromTable(table);
-  }
-  if (lower.endsWith('.xls')) {
+  if (fileName.toLowerCase().endsWith('.xls')) {
     throw new UserError('Old .xls files are not read yet. Download the statement as .xlsx or CSV, or open it in Excel and save as .xlsx.');
   }
-  throw new UserError('Upload the statement as a .csv or .xlsx file (PDF comes later, F010 P1)');
+  if (!/\.(csv|xlsx)$/i.test(fileName)) throw new UserError('Upload the statement as a .csv or .xlsx file (PDF comes later, F010 P1)');
+  return rowsFromTable(await readTableFile(fileName, content));
 }

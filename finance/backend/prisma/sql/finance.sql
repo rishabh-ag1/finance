@@ -593,6 +593,70 @@ drop trigger if exists reimbursement_month_open on finance."Reimbursement";
 create trigger reimbursement_month_open before insert or update on finance."Reimbursement"
   for each row execute function finance.claim_month_open();
 
+-- ---------------------------------------------------------------------------
+-- Order-to-bank (M18): imported gateway and courier figures never change
+-- ---------------------------------------------------------------------------
+alter table finance."GatewayPayment" drop constraint if exists gateway_payment_shape;
+alter table finance."GatewayPayment" add constraint gateway_payment_shape check (
+  "amount" > 0 and "fee" >= 0 and "taxOnFee" >= 0 and "refunded" >= 0 and "refunded" <= "amount"
+  and "status" in ('captured', 'refunded') and (("orderNumber" is null) = ("linkedBy" is null))
+);
+alter table finance."SettlementBatch" drop constraint if exists settlement_batch_shape;
+alter table finance."SettlementBatch" add constraint settlement_batch_shape check (
+  (("bankTxnId" is null) = ("matchedBy" is null))
+);
+alter table finance."OrderBankLink" drop constraint if exists order_bank_link_shape;
+alter table finance."OrderBankLink" add constraint order_bank_link_shape check (
+  "amount" > 0 and (not "isArchived" or length(trim(coalesce("archivedReason", ''))) > 0)
+);
+alter table finance."OrderWriteOff" drop constraint if exists order_write_off_shape;
+alter table finance."OrderWriteOff" add constraint order_write_off_shape check (
+  "amount" >= 0 and length(trim("reason")) > 0 and (not "isArchived" or length(trim(coalesce("archivedReason", ''))) > 0)
+);
+alter table finance."ReconDiscrepancy" drop constraint if exists recon_discrepancy_shape;
+alter table finance."ReconDiscrepancy" add constraint recon_discrepancy_shape check (
+  "status" in ('open', 'cleared', 'resolved')
+  and ("status" <> 'resolved' or (length(trim(coalesce("resolutionNote", ''))) > 0 and "resolvedBy" is not null))
+);
+
+create or replace function finance.recon_facts_fixed() returns trigger
+language plpgsql as $$
+declare
+  movable text[] := case tg_table_name
+    when 'GatewayPayment' then array['status', 'refunded', 'orderNumber', 'linkedBy', 'reference', 'contact', 'method', 'externalOrderId', 'updatedAt', 'updatedBy']
+    when 'SettlementBatch' then array['bankTxnId', 'matchedBy', 'updatedAt', 'updatedBy']
+    else array['orderNumber', 'linkedBy', 'updatedAt', 'updatedBy'] end;
+begin
+  if (to_jsonb(new) - movable) is distinct from (to_jsonb(old) - movable) then
+    raise exception 'finance: imported Razorpay / Shiprocket figures cannot be changed; import the corrected report or raise a discrepancy'
+      using errcode = 'P0013';
+  end if;
+  return new;
+end $$;
+drop trigger if exists gateway_payment_fixed on finance."GatewayPayment";
+create trigger gateway_payment_fixed before update on finance."GatewayPayment"
+  for each row execute function finance.recon_facts_fixed();
+drop trigger if exists settlement_batch_fixed on finance."SettlementBatch";
+create trigger settlement_batch_fixed before update on finance."SettlementBatch"
+  for each row execute function finance.recon_facts_fixed();
+drop trigger if exists settlement_line_fixed on finance."SettlementLine";
+create trigger settlement_line_fixed before update on finance."SettlementLine"
+  for each row execute function finance.recon_facts_fixed();
+
+-- BR-36: no settlement or remittance imported into a locked month.
+create or replace function finance.settlement_month_open() returns trigger
+language plpgsql as $$
+begin
+  if finance.is_month_locked(new."entityId", new."settledOn") then
+    raise exception 'finance: % is in a locked month; unlock it in Settings > Period lock first', new."settledOn"
+      using errcode = 'P0007';
+  end if;
+  return new;
+end $$;
+drop trigger if exists settlement_month_open on finance."SettlementBatch";
+create trigger settlement_month_open before insert on finance."SettlementBatch"
+  for each row execute function finance.settlement_month_open();
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$

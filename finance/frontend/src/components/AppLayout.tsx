@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
-import { Banknote, ChartColumn, Percent, ClipboardList, FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings, Tags, Truck, Upload, UserRound, Wand2, type LucideIcon, CalendarRange, WalletCards } from 'lucide-react';
+import { Banknote, ChartColumn, Percent, ClipboardList, FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings, Tags, Truck, Upload, UserRound, Wand2, type LucideIcon, CalendarRange, WalletCards, ArrowRightLeft } from 'lucide-react';
 import { useAuth } from '../context/auth';
 import { cn } from '../lib/utils';
 import { useReviewCount } from '../pages/bank/ledgerApi';
+import { useDiscrepancyCount } from '../pages/orders/api';
 
 const SIDEBAR_STORAGE_KEY = 'bloc-finance:sidebar-expanded';
 
@@ -15,7 +16,7 @@ type NavItem = {
   /** Not built yet: shown greyed out so the founders can see what is coming. */
   soon?: boolean;
   /** Shows a count next to the label. */
-  badge?: 'review';
+  badge?: 'review' | 'discrepancies';
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -32,6 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/payables', label: 'Payables', icon: Banknote, module: 'financePayments' },
   { to: '/tds', label: 'TDS', icon: Percent, module: 'financeTds' },
   { to: '/claims', label: 'Founder claims', icon: WalletCards, module: 'financeClaims' },
+  { to: '/order-to-bank', label: 'Order-to-bank', icon: ArrowRightLeft, module: 'financeOrders', badge: 'discrepancies' },
   { to: '/documents', label: 'Documents', icon: FileText, module: 'financeDocuments' },
   { to: '/categories', label: 'Categories', icon: Tags, module: 'financeSettings' },
   { to: '/settings', label: 'Settings', icon: Settings, module: 'financeSettings' },
@@ -55,6 +57,8 @@ export function AppLayout() {
   }, [expanded]);
 
   const { data: reviewCount } = useReviewCount();
+  // F199: open order-to-bank mismatches as a badge (the daily e-mail digest waits for a mail account, D13).
+  const { data: discrepancyCount } = useDiscrepancyCount(hasPermission('financeOrders', 'view'));
   const items = NAV_ITEMS.filter((item) => hasPermission(item.module, 'view'));
 
   const handleLogout = async () => {
@@ -136,6 +140,11 @@ export function AppLayout() {
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {expanded && <span className="truncate">{label}</span>}
+                  {badge === 'discrepancies' && !!discrepancyCount && (
+                    <span title={`${discrepancyCount} open mismatches`} className={cn('rounded-full bg-red-500 px-1.5 text-[10.5px] font-bold leading-[16px] text-white', expanded ? 'ml-auto' : '-ml-2')}>
+                      {discrepancyCount}
+                    </span>
+                  )}
                   {badge === 'review' && !!reviewCount && (
                     <span title={`${reviewCount} to review`} className={cn('rounded-full bg-amber-500 px-1.5 text-[10.5px] font-bold leading-[16px] text-white', expanded ? 'ml-auto' : '-ml-2')}>
                       {reviewCount}

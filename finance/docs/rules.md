@@ -313,7 +313,7 @@
 
 - **Module:** M10
 - **Trigger:** Settlement imported
-- **Logic:** Settlement amount (bank credit) = sum of captured payments - refunds - fees - GST on fees (- adjustments). Creates: gross receipts per order/invoice, fee expense (Bank Charges / Payment Gateway), GST on fees (input credit). One bank row matched to one settlement batch.
+- **Logic:** Settlement amount (bank credit) = sum of captured payments - refunds - fees - GST on fees (- adjustments). Creates: gross receipts per order/invoice, fee expense (Bank Charges / Payment Gateway), GST on fees (input credit). One bank row matched to one settlement batch. As built (Step 13): settlements are imported, tied out (BR-47) and matched to one bank credit, which is categorised Revenue / Razorpay at its net. Fees and GST on fees are shown per settlement; booking them as expense and input credit comes with receivables (M10, Phase 3).
 - **Worked example:** -
 - **Confidence:** High
 
@@ -353,7 +353,7 @@
 
 - **Module:** M18
 - **Trigger:** Any change to the order, gateway payment, remittance, settlement or bank match
-- **Logic:** Route decided by the CRM order's payment method. Razorpay (prepaid): Awaiting payment, then Paid at gateway, then Settled, then In bank. Shiprocket COD: Awaiting delivery, then Delivered (awaiting remittance), then Remitted, then In bank. Direct (UPI / bank transfer / cash / credit customers): Awaiting payment (or Due date for credit), then In bank. End states outside the route: Refunded, RTO / Cancelled (nothing expected), Written off. Flags on top of any state: Overdue (BR-45) and Discrepancy (BR-46).
+- **Logic:** Route decided by the CRM order's payment method. As built (Step 13, Q35): FREE or replacement: nothing to collect; Amazon: marketplace, not tracked; COD: Shiprocket COD; RAZORPAY, and UPI on a Shopify order (Magic Checkout records UPI for prepaid Shopify orders): Razorpay; other UPI and bank transfer: direct. Expected amount: COD to collect from bloc-inv for COD (else the balance due), the order total otherwise. Razorpay (prepaid): Awaiting payment, then Paid at gateway, then Settled, then In bank. Shiprocket COD: Awaiting delivery, then Delivered (awaiting remittance), then Remitted, then In bank. Direct (UPI / bank transfer / cash / credit customers): Awaiting payment (or Due date for credit), then In bank. End states outside the route: Refunded, RTO / Cancelled (nothing expected), Written off. Flags on top of any state: Overdue (BR-45) and Discrepancy (BR-46). A Razorpay order is Refunded when refunds reach the captured amount; a cancelled order with nothing collected is RTO / Cancelled; a direct order is In bank once linked credits reach the order total less the tolerance. Advances on COD orders are shown, not yet tracked separately (Q35).
 - **Worked example:** COD order ₹1,499 delivered 10 Oct: 'Delivered, awaiting remittance'. Shiprocket remittance on 15 Oct includes its AWB: 'Remitted'. Remittance credit hits IDFC 15 Oct and is matched: 'In bank'.
 - **Confidence:** High
 
@@ -361,7 +361,7 @@
 
 - **Module:** M18
 - **Trigger:** Daily
-- **Logic:** Razorpay: capture date + settlement cycle (setting, default 3 working days, matching the 2-3 days you see). COD: delivery date + remittance cycle (setting, taken from your Shiprocket account). Settlement or remittance to bank: same or next working day. Overdue when today > expected date + grace days (setting, default 2). Bank holidays and weekends skipped via a holiday list in settings.
+- **Logic:** Razorpay: capture date + settlement cycle (setting, default 3 working days, matching the 2-3 days you see). COD: delivery date + remittance cycle (setting, taken from your Shiprocket account). Settlement or remittance to bank: same or next working day. Overdue when today > expected date + grace days (setting, default 2). Bank holidays and weekends skipped via a holiday list in settings. As built (Step 13): all cycles in working days; an event on a non-working day counts from the next working day (Saturday + 1 = Monday); overdue from expected + grace working days, inclusive (the worked example). COD remittance cycle default 5 working days [Verify] (Q24). Delivered date from bloc-inv.
 - **Worked example:** Razorpay payment captured Friday 9 Oct: expected settlement Wednesday 14 Oct (3 working days), overdue from Friday 16 Oct.
 - **Confidence:** High on logic. Cycle values to be read from your Razorpay and Shiprocket accounts (Q24).
 
@@ -369,7 +369,7 @@
 
 - **Module:** M18
 - **Trigger:** Each sync and each bank import
-- **Logic:** Raise a discrepancy when: 1) order amount differs from amount captured or COD collected (tolerance ₹1, setting); 2) gateway payment has no matching CRM order, or CRM prepaid order has no gateway payment; 3) payment captured but missing from settlements past expected date; 4) fee + GST on fee is above expected rate x gross + tolerance; 5) settlement or remittance not matched to a bank credit within 2 working days; 6) bank credit amount differs from settlement net; 7) refund in Razorpay but order not cancelled/returned in CRM, or the reverse; 8) two payments on one order; 9) COD delivered but not remitted past expected date; 10) COD remitted amount differs from order COD amount. Each has a type code, amount and suggested action.
+- **Logic:** Raise a discrepancy when: 1) order amount differs from amount captured or COD collected (tolerance ₹1, setting); 2) gateway payment has no matching CRM order, or CRM prepaid order has no gateway payment; 3) payment captured but missing from settlements past expected date; 4) fee + GST on fee is above expected rate x gross + tolerance; 5) settlement or remittance not matched to a bank credit within 2 working days; 6) bank credit amount differs from settlement net; 7) refund in Razorpay but order not cancelled/returned in CRM, or the reverse; 8) two payments on one order; 9) COD delivered but not remitted past expected date; 10) COD remitted amount differs from order COD amount. Each has a type code, amount and suggested action. As built (Step 13): 11) settlement lines do not add up to the settlement net (BR-47 level 2); type 1 also for BR-47 level 1 and type 6 for level 3; type 2 both ways (a prepaid order with no payment after the grace days, and a Razorpay payment naming no order after the grace days); type 4 compares Razorpay fees with GST against gross x rate x (1 + GST rate) + tolerance. Checks cover the last 180 days (and not before Settings > Track from). A problem that stops failing is Cleared by itself; a Resolved one keeps its action and note.
 - **Worked example:** CRM order ₹2,998, Razorpay captured ₹2,499 (customer used a coupon not recorded in CRM): type 1, amount ₹499, action 'correct CRM order or chase customer'.
 - **Confidence:** High
 
@@ -377,7 +377,7 @@
 
 - **Module:** M18
 - **Trigger:** Settlement or remittance imported and bank matched
-- **Logic:** Level 1: each order amount = its gross in the settlement/remittance. Level 2: sum of lines (gross - fees - GST on fees - refunds +/- adjustments) = settlement net. Level 3: settlement net = bank credit. Each level shows its difference; any non-zero difference creates a discrepancy.
+- **Logic:** Level 1: each order amount = its gross in the settlement/remittance. Level 2: sum of lines (gross - fees - GST on fees - refunds +/- adjustments) = settlement net. Level 3: settlement net = bank credit. Each level shows its difference; any non-zero difference creates a discrepancy. As built (Step 13): level 1 uses lines linked to an order (Razorpay: the order total; COD: COD to collect); level 3 waits until a bank credit is linked.
 - **Worked example:** Illustrative only: 3 Razorpay orders ₹1,499 + ₹2,998 + ₹1,499 = ₹5,996 gross; fees at 2% = ₹119.92; GST 18% on fees = ₹21.59; net ₹5,854.49 must equal the IDFC credit.
 - **Confidence:** High
 

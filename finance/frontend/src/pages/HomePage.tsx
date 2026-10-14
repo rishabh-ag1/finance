@@ -24,6 +24,7 @@ type Home = {
   months: Month[];
   payables: { overdue: string; dueThisWeek: string; msmeAtRisk: number };
   founders: { founderUserId: string; founderName: string; owed: string; waiting: string }[];
+  orderToBank: { inTransit: string | null; overdue: number; openDiscrepancies: number } | null;
   actions: { claimsToApprove: number; review: number; uncategorisedLastThree: number; staleStatements: { id: string; name: string; lastImportedAt: string | null }[]; missingDocuments: number; pendingBankApprovals: number; tdsToDeposit: { month: string; amount: string; dueDate: string; overdue: boolean }[] };
 };
 
@@ -58,6 +59,8 @@ export function HomePage() {
   const noData = h.cash.accounts.every((a) => !a.lastTxnDate);
   const max = Math.max(1, ...h.months.flatMap((m) => [Number(m.grossBurn), Number(m.operatingIncome), Number(m.capex)]));
   const actions = [
+    h.orderToBank && h.orderToBank.openDiscrepancies > 0 && { text: `${h.orderToBank.openDiscrepancies} order-to-bank mismatch(es) to look at`, to: '/order-to-bank?tab=discrepancies' },
+    h.orderToBank && h.orderToBank.overdue > 0 && { text: `${h.orderToBank.overdue} order payment(s) overdue from Razorpay, Shiprocket or the bank`, to: '/order-to-bank' },
     h.actions.claimsToApprove > 0 && { text: `${h.actions.claimsToApprove} founder claim(s) waiting for approval`, to: '/claims?status=submitted' },
     h.actions.review > 0 && { text: `${h.actions.review} bank row${h.actions.review === 1 ? '' : 's'} to review`, to: '/review' },
     h.actions.uncategorisedLastThree > 0 && { text: `${h.actions.uncategorisedLastThree} row(s) of the last 3 months have no category, so burn may be understated`, to: '/review' },
@@ -92,6 +95,7 @@ export function HomePage() {
             <Kpi key={f.founderUserId} label={`Owed to ${f.founderName}`} value={short(f.owed)} hint={f.waiting !== '0.00' ? `${short(f.waiting)} waiting for approval` : 'Approved claims not yet paid back'} to="/claims" />
           ))}
           {h.founders.length === 0 && <Kpi label="Cash forecast" value="13 weeks" hint="What is due each week" to="/forecast" />}
+          {h.orderToBank && hasPermission('financeOrders', 'view') && <Kpi label="Money in transit" value={short(h.orderToBank.inTransit ?? '0')} hint="Paid by customers, not yet in the bank" tone={h.orderToBank.overdue ? 'bad' : undefined} to="/order-to-bank" />}
         </div>
       )}
 

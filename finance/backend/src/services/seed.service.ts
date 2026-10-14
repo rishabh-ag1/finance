@@ -89,6 +89,9 @@ const APPROVAL_BANDS = [
 export async function seedMasters(tx: Tx): Promise<{ companyId: string }> {
     const company = (await tx.company.findFirst()) ?? (await tx.company.create({ data: COMPANY }));
 
+    // M18 order-to-bank settings with the defaults in BR-45 / BR-46 (cycles to confirm, Q24).
+    await tx.reconSetting.upsert({ where: { entityId: company.id }, update: {}, create: { entityId: company.id } });
+
     await tx.bankAccount.upsert({
         where: { bankName_accountNumber: { bankName: IDFC.bankName, accountNumber: IDFC.accountNumber } },
         update: {},

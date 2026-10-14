@@ -1,7 +1,7 @@
 // Entelechy Finance - Prisma schema.
 // Same conventions as Bloc's crm/backend/prisma/schema.prisma: multiSchema, cuid string ids,
 // PascalCase models with camelCase columns, schema changes via `prisma db push` (no migrations dir).
-// Every model lives in the Postgres schema "finance". Finance never writes to the CRM's schemas.
+// Every model lives in the Postgres schema "finance" (reader stubs in "finance_stub"). Finance never writes to the CRM's schemas.
 // What Prisma cannot express (audit triggers, no-hard-delete triggers, check constraints) is in
 // prisma/sql/finance.sql, applied by `npm run db:sync` right after the push.
 // Every model must have a single `id` column: the audit trigger keys AuditLog rows on it.
@@ -15,7 +15,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["finance"]
+  schemas  = ["finance", "finance_stub"]
 }
 
 // ---------- Users, roles & audit (M16) ----------
@@ -1298,5 +1298,295 @@ model Reimbursement {
   claims            ExpenseClaim[]
 
   @@index([founderUserId])
+  @@schema("finance")
+}
+
+// ============================================================================
+// M18 Order-to-bank (Phase 2, Step 13)
+// ============================================================================
+
+// ---------- Reader stubs (D15) ----------
+// Stand-ins for the CRM's public."Order" and bloc-inv's "OutgoingOrder", same table and column
+// names, in their own schema "finance_stub". The CRM and Inventory readers query them with the same
+// SQL they will run against the real databases (CRM_DATABASE_URL / INVENTORY_DATABASE_URL). Finance
+// code never writes here; only tests and the stub loader do. No audit triggers: not Finance's data.
+
+model CrmOrder {
+  id                   String    @id @default(cuid())
+  orderNumber          String    @unique
+  channel              String
+  paymentMethod        String
+  totalAmount          Decimal   @db.Decimal(10, 2)
+  advancePaid          Decimal   @default(0) @db.Decimal(10, 2)
+  advancePaymentMethod String?
+  balanceDue           Decimal   @default(0) @db.Decimal(10, 2)
+  customerName         String
+  phone                String
+  email                String?
+  shopifyOrderId       String?
+  status               String    @default("CONFIRMED")
+  shiprocketAwbNumber  String?
+  replacementOfId      String?
+  createdAt            DateTime  @default(now())
+  shippedAt            DateTime?
+  deliveredAt          DateTime?
+  cancelledAt          DateTime?
+  returnedAt           DateTime?
+  updatedAt            DateTime  @updatedAt
+
+  @@map("Order")
+  @@schema("finance_stub")
+}
+
+model InvOutgoingOrder {
+  id            String    @id @default(cuid())
+  orderNumber   String    @unique
+  crmOrderId    String?   @unique
+  source        String    @default("SHOPIFY")
+  paymentMethod String?
+  codToCollect  Decimal?  @db.Decimal(12, 2)
+  saleTotal     Decimal?  @db.Decimal(12, 2)
+  awbNumber     String?   @unique
+  carrierType   String    @default("SHIPROCKET")
+  status        String    @default("CONFIRMED")
+  shippedAt     DateTime?
+  deliveredAt   DateTime?
+  cancelledAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("OutgoingOrder")
+  @@schema("finance_stub")
+}
+
+// ---------- Finance's own records ----------
+
+enum ReconSource {
+  razorpay
+  shiprocket_cod
+
+  @@schema("finance")
+}
+
+/// BR-45 / BR-46 values (Settings > Order-to-bank). Cycles in working days.
+model ReconSetting {
+  id                     String    @id @default(cuid())
+  entityId               String    @unique
+  razorpaySettlementDays Int       @default(3)
+  /// [Verify] from the Shiprocket account (Q24).
+  codRemittanceDays      Int       @default(5)
+  settlementToBankDays   Int       @default(1)
+  graceDays              Int       @default(2)
+  amountTolerance        Decimal   @default(1) @db.Decimal(14, 2)
+  /// Razorpay fee in % of gross, before GST; GST on the fee in %.
+  expectedFeeRate        Decimal   @default(2) @db.Decimal(5, 2)
+  feeGstRate             Decimal   @default(18) @db.Decimal(5, 2)
+  /// Orders placed before this date are not tracked (no history is migrated, D10).
+  trackFrom              DateTime? @db.Date
+  createdAt              DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy              String?
+  updatedAt              DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy              String?
+
+  @@schema("finance")
+}
+
+/// Bank holidays skipped by working-day counts (BR-45).
+model BankHoliday {
+  id         String   @id @default(cuid())
+  date       DateTime @unique @db.Date
+  name       String
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  createdBy  String?
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy  String?
+
+  @@schema("finance")
+}
+
+/// One uploaded Razorpay or Shiprocket report (the file is an attachment of this record).
+model ReconImport {
+  id         String      @id @default(cuid())
+  entityId   String
+  source     ReconSource
+  /// payments, settlements or remittances
+  kind       String
+  fileName   String
+  rows       Int
+  added      Int
+  /// Already imported earlier (same payment / settlement id): left as they were.
+  repeated   Int
+  skipped    Int
+  createdAt  DateTime    @default(now()) @db.Timestamptz(6)
+  createdBy  String?
+  updatedAt  DateTime    @updatedAt @db.Timestamptz(6)
+  updatedBy  String?
+
+  @@schema("finance")
+}
+
+/// F192: a captured Razorpay payment. Amount, id and capture date are fixed once imported.
+model GatewayPayment {
+  id              String      @id @default(cuid())
+  entityId        String
+  source          ReconSource @default(razorpay)
+  externalId      String      @unique
+  externalOrderId String?
+  method          String?
+  amount          Decimal     @db.Decimal(14, 2)
+  /// Fee before GST, and the GST on it (Razorpay's fee column includes the GST).
+  fee             Decimal     @default(0) @db.Decimal(14, 2)
+  taxOnFee        Decimal     @default(0) @db.Decimal(14, 2)
+  refunded        Decimal     @default(0) @db.Decimal(14, 2)
+  /// captured or refunded
+  status          String
+  capturedOn      DateTime    @db.Date
+  /// Text from the report that may name the order (description, notes, receipt, e-mail).
+  reference       String      @default("")
+  contact         String?
+  /// The CRM order it pays; linkedBy: reference, amount_date or manual.
+  orderNumber     String?
+  linkedBy        String?
+  importId        String?
+  createdAt       DateTime    @default(now()) @db.Timestamptz(6)
+  createdBy       String?
+  updatedAt       DateTime    @updatedAt @db.Timestamptz(6)
+  updatedBy       String?
+
+  @@index([orderNumber])
+  @@index([capturedOn])
+  @@schema("finance")
+}
+
+/// F194 / F198: one Razorpay settlement or Shiprocket COD remittance, matched to one bank credit.
+model SettlementBatch {
+  id          String           @id @default(cuid())
+  entityId    String
+  source      ReconSource
+  externalId  String
+  utr         String?
+  settledOn   DateTime         @db.Date
+  gross       Decimal          @db.Decimal(14, 2)
+  fees        Decimal          @db.Decimal(14, 2)
+  taxOnFees   Decimal          @db.Decimal(14, 2)
+  refunds     Decimal          @db.Decimal(14, 2)
+  adjustments Decimal          @db.Decimal(14, 2)
+  net         Decimal          @db.Decimal(14, 2)
+  bankTxnId   String?          @unique
+  /// utr, amount_date or manual
+  matchedBy   String?
+  importId    String?
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+  createdBy   String?
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
+  updatedBy   String?
+  lines       SettlementLine[]
+
+  @@unique([source, externalId])
+  @@index([settledOn])
+  @@schema("finance")
+}
+
+/// One payment, refund, adjustment (Razorpay) or AWB (COD) inside a batch. Figures fixed.
+model SettlementLine {
+  id          String          @id @default(cuid())
+  batchId     String
+  /// payment, refund, adjustment or cod
+  type        String
+  externalId  String
+  paymentId   String?
+  awb         String?
+  gross       Decimal         @db.Decimal(14, 2)
+  fee         Decimal         @db.Decimal(14, 2)
+  taxOnFee    Decimal         @db.Decimal(14, 2)
+  refund      Decimal         @db.Decimal(14, 2)
+  adjustment  Decimal         @db.Decimal(14, 2)
+  net         Decimal         @db.Decimal(14, 2)
+  reference   String          @default("")
+  happenedOn  DateTime?       @db.Date
+  orderNumber String?
+  linkedBy    String?
+  createdAt   DateTime        @default(now()) @db.Timestamptz(6)
+  createdBy   String?
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(6)
+  updatedBy   String?
+  batch       SettlementBatch @relation(fields: [batchId], references: [id])
+
+  @@unique([batchId, externalId])
+  @@index([orderNumber])
+  @@index([paymentId])
+  @@index([awb])
+  @@schema("finance")
+}
+
+/// F195: a direct payment (UPI / transfer / cash deposit) for a CRM order, seen as a bank credit.
+model OrderBankLink {
+  id             String   @id @default(cuid())
+  entityId       String
+  orderNumber    String
+  bankTxnId      String
+  amount         Decimal  @db.Decimal(14, 2)
+  /// amount_date_name or manual
+  matchedBy      String
+  isArchived     Boolean  @default(false)
+  archivedReason String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  createdBy      String?
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy      String?
+
+  @@index([orderNumber])
+  @@index([bankTxnId])
+  @@schema("finance")
+}
+
+/// Order Payment 'Written off': an accepted loss, with a reason (admin). Undone by archiving.
+model OrderWriteOff {
+  id             String   @id @default(cuid())
+  entityId       String
+  orderNumber    String
+  amount         Decimal  @db.Decimal(14, 2)
+  reason         String
+  isArchived     Boolean  @default(false)
+  archivedReason String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  createdBy      String?
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy      String?
+
+  @@index([orderNumber])
+  @@schema("finance")
+}
+
+/// F196 / BR-46: one mismatch. Open while the check fails; Cleared (C) when it stops failing;
+/// Resolved (M) with an action and note. History is kept.
+model ReconDiscrepancy {
+  id               String    @id @default(cuid())
+  entityId         String
+  /// type:scope:id, e.g. 1:order:BLC-260501 - one row per problem.
+  key              String    @unique
+  typeCode         Int
+  orderNumber      String?
+  batchId          String?
+  gatewayPaymentId String?
+  amount           Decimal   @db.Decimal(14, 2)
+  detail           String
+  suggestedAction  String
+  /// open, cleared or resolved
+  status           String    @default("open")
+  detectedAt       DateTime  @default(now()) @db.Timestamptz(6)
+  clearedAt        DateTime? @db.Timestamptz(6)
+  resolutionAction String?
+  resolutionNote   String?
+  resolvedBy       String?
+  resolvedAt       DateTime? @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy        String?
+
+  @@index([status, typeCode])
+  @@index([orderNumber])
   @@schema("finance")
 }
