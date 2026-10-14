@@ -76,7 +76,7 @@ When a founder's answer in `docs/open-questions.md` changes behaviour, apply it 
 Recorded as D11-D13 in `docs/spec.md` README (and the Google Sheet). Check this list whenever infrastructure changes:
 
 1. **File storage is local** (`FILE_STORAGE=local`, files in `backend/.files`). Switch to Drive: Google Cloud service account, a folder in a Shared Drive shared with it as Content manager, then `FILE_STORAGE=drive`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `DRIVE_ROOT_FOLDER_ID`, and a one-off script to move the existing local files into Drive and update `Attachment.storage` / `storageKey`. The Drive driver (`backend/src/storage/drive.ts`) has not run against real credentials yet: test it first.
-2. **The Google Sheet PRD is updated by hand** from the repo (no service account for `scripts/sync-spec-to-sheet.ts` yet). Once the service account exists: share the sheet with it as Editor and add GitHub secrets `SPEC_SHEET_ID` and `GOOGLE_SERVICE_ACCOUNT_JSON`; the workflow then syncs on every merge to `main`. Last manual update of the sheet: docs as of changelog v0.21 (14 Oct 2026). Next manual update: push only rows changed since then (compare with the docs at the v0.21 commit; README rows in the sheet sit 3 rows lower than in spec.md because of blank spacer rows).
+2. **The Google Sheet PRD is updated by hand** from the repo (no service account for `scripts/sync-spec-to-sheet.ts` yet). Once the service account exists: share the sheet with it as Editor and add GitHub secrets `SPEC_SHEET_ID` and `GOOGLE_SERVICE_ACCOUNT_JSON`; the workflow then syncs on every merge to `main`. Last manual update of the sheet: docs as of changelog v0.22 (14 Oct 2026). Next manual update: push only rows changed since then (compare with the docs at the v0.22 commit; README rows in the sheet sit 3 rows lower than in spec.md because of blank spacer rows).
 3. **GSTIN Fetch is off** until `GSTINAPI_KEY` (the CRM's gstinapi.in key) is set in `backend/.env`.
 4. **Development database** is Postgres 17 on the founder's PC, port 5433, started outside the Windows service. Production target: the CRM's server (EC2 `bloccrm` per Bloc's docs, or the GCP VM `crm-prod` with Postgres 16 per bloc-inv's docs; Q33), schema `finance`.
 5. **Real IDFC download checked** (Q30 answered 13 Oct 2026): the XLSX export parses as is and previews clean (27 rows, balance to 4,04,901). The founders do the first real import themselves from the Import page; imported rows cannot be deleted. Never commit real statements to the repo.
@@ -89,9 +89,9 @@ Recorded as D11-D13 in `docs/spec.md` README (and the Google Sheet). Check this 
 
 The old Financials Master history is not imported (F023 dropped, D10). Never add code that carries over old descriptions, categories or notes. The founders categorise in the app and add categories / sub-categories there (Categories page or "+ New" in the categorise form). Default rules set a category only, never a description.
 
-## Open blocker before invoicing goes live
+## Invoicing entity (confirmed)
 
-Confirm with the founders and the CA which entity is invoicing customers today (the current proforma sheet still issues under Newera Living as of Aug 2026). Build the invoice engine, but do not seed a live invoice series or issue real invoices until this is confirmed.
+Entelechy Labs Private Limited issues all customer invoices (founders, 14 Oct 2026). GST charged to customers is 18% (Q29). The sales series are switched on when Phase 3 builds invoicing. The next PO and payment numbers (Q28) will be shared later: leave both series at 1 and do not fill in any numbers until then.
 
 ## Scope discipline
 
