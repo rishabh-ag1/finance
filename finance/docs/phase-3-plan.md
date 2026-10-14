@@ -1,0 +1,45 @@
+# Phase 3 - Customers, invoicing, receivables, funding and the CA pack
+
+Goal: every customer invoice (B2B and D2C) is issued from this app with correct numbering and GST, every rupee coming in is matched to an invoice or order, loans and capital are tracked against the Mesa covenant, and the CA gets one monthly workbook. Retires the Sales <> Master Data proforma tab, the manual invoice templates and the receivables tracking done by hand. Completes v1.
+
+Modules: M08 Customers, M11 Products & Price List, M09 Sales Documents, M10 Receivables & Collections, M13 Funding & Loans, M17 CA Export Pack, M12 Dashboards (AR slice), plus the Phase 1-2 leftovers listed in Step 19.
+
+Decided before starting (14 Oct 2026): Entelechy Labs Private Limited issues all customer invoices (D9, D14); customers are charged 18% GST (Q29); one tax invoice series for B2B and B2C (Documents & Numbering); sales issue invoices from the CRM through Finance's API, numbering and the register live here (Q19, F105); D2C invoices are issued when the order ships, by Shiprocket pickup or 'Shipped' marked in the CRM for Porter / self-delivery (Q27, BR-48); sachet refill plans are in scope (Q11).
+
+Built without the pending setup (D14): no email (PDFs are downloaded or shared on WhatsApp), CRM and bloc-inv read through their stub tables until Finance runs on the same server (D15, Q33). Next PO and payment numbers come later (Q28).
+
+Testing note: issued invoices take real numbers that can never be reused (BR-30). Test invoicing on a practice database, not on the one used for real books.
+
+## Build order
+
+Steps continue the Phase 2 numbering (14 to 19). They are not module IDs: Step 14 builds M08 and M11, Step 15 and Step 16 M09, Step 17 M10 and the AR slice of M12, Step 18 M13, Step 19 M17 and the leftovers.
+
+14. **Customers and products** (F080-F083, F120-F122): customers, companies and outlets read from the CRM through the CRM reader; Finance fields per customer / outlet (credit terms, credit limit, invoice e-mails, deducts TDS, billing entity) stored here keyed by CRM id; customer overview; credit-limit warning (F083, warn only). Products with SKU, HSN, GST rate, price and unit cost read from bloc-inv through the Inventory reader (D15); price lists (MRP / HoReCa / Distributor / Marketplace, inclusive or exclusive of GST, effective dates) with the customer's list deciding the default line rate. The purchase catalogue (F122) was built in Step 8.
+15. **Invoice engine** (F090-F098, F104, F106): proformas, tax invoices and credit notes; B2B or B2C from the customer's GSTIN (BR-49); place of supply and CGST + SGST or IGST (BR-20); rounding and amount in words (BR-21); number on issue only, in one transaction (BR-30); checks on issue (BR-32, F094); proforma to tax invoice with advances applied (BR-33); cancel before GSTR-1, else credit note (BR-34); e-way bill warning above the threshold (BR-42); template settings page and PDF with Original / Duplicate / Triplicate copies, frozen per issued document (F095, F104); sales person on every document (F106). Sales series switched on here.
+16. **D2C invoicing and the CRM API** (F102, F103, F105, F099): a batch that issues a B2C invoice for each D2C order when it ships (BR-48), with a fix-list for orders it cannot invoice (missing address, missing HSN); RTO / post-dispatch cancellation drafts a credit note for review (F103); the invoice API the CRM calls to create, issue and fetch PDFs, every call logged with user and CRM order (F105); sachet refill plans per outlet that draft invoices each cycle (F099).
+17. **Receivables** (F110-F117, F133, D08): outstanding list and AR ageing (BR-24); receipts with RCT number, allocation across invoices, unallocated as customer advance (F111, F112); bank credit to invoice suggestions with confidence (BR-38, F113); customer TDS (BR-41, off by default); Razorpay settlements and COD remittances settle the D2C invoices of their orders, and gateway fees and GST on fees are booked (BR-39, BR-40, from M18); reminders as share text (F116, manual); receivables dashboard (F133) and receivables on Home (D08); customer statement PDF.
+18. **Funding and loans** (F140-F143): capital receipts (paid-up, share application money, allotment); loan register with EMI, bullet or flexible repayment; schedules and prepayments; total debt against the Mesa Rs 45L cap (BR-28); loan EMIs in the 13-week forecast and loan rows matched from the bank.
+19. **CA pack and v1 finish** (F180, F181, leftovers): monthly Excel workbook for the CA (transactions with category, party, GST and TDS columns; vendor bills; sales invoices; credit notes; receipts; payments; TDS register; links to files); GST working (outward by invoice and HSN, inward with ITC); and the Phase 1-2 leftovers: match a bank row to any document (F020), manual cash entries (F022), the full vendor overview and statement (F038), role assignment and per-record audit panel (F171, F172), in-app alerts (F173), order-to-bank funnel and days to bank (D36, D37). Then a full pass of every acceptance check of Phases 1-3.
+
+Not in Phase 3: quotations (F100, P2), delivery challans (F101, P2, Q32), reading bills from PDF (F056), bank bulk payment file (F066), unit economics and budgets (F134, F135), Tally / Zoho voucher export (F182), the PNB parser until the account opens (F024, Q25), e-mail sending and the F199 digest (mail account, D13), WhatsApp API (P2).
+
+## Acceptance checks
+
+| # | Check | Expected |
+|---|---|---|
+| C1 | Customer list (F080, F081) | Customers and outlets come from the CRM reader; a new customer's Finance fields default to payment terms On delivery and deducts TDS No; Finance cannot create a customer the CRM does not have |
+| C2 | Products and price list (F120, F121) | SKU, HSN and GST rate come from bloc-inv; a HoReCa customer's invoice line takes the HoReCa price-list rate (exclusive of GST) |
+| C3 | Numbering (BR-30) | A draft has no number; the first issue gets ELPL/26-27/00001 (16 characters); two issues at once get consecutive numbers; a cancelled invoice keeps its number |
+| C4 | B2B vs B2C (BR-49, BR-20) | Hotel with GSTIN 29XXXXX: B2B, CGST 9% + SGST 9%. Home customer in Pune, no GSTIN: B2C, IGST 18%, place of supply 27 (Maharashtra) |
+| C5 | Rounding (BR-21) | Total Rs 37,401.28 shows Rs 37,401.00 with round off -0.28; 2.5% of Rs 999.00 = Rs 24.98 per line; Rs 11,36,800 in words: Rupees Eleven Lakh Thirty Six Thousand Eight Hundred Only |
+| C6 | Checks on issue (F094, BR-32) | A line without HSN, a B2B customer with an invalid GSTIN, or no place of supply: refused in plain words until fixed |
+| C7 | Proforma to tax invoice (BR-33) | Converting a proforma with an advance received copies its lines, marks it Converted (or part converted by quantity) and applies the advance to the new invoice |
+| C8 | Cancel vs credit note (BR-34) | Issued, month not yet reported in GSTR-1: cancel with reason, number stays, PDF stamped CANCELLED. Month reported: cancel refused, credit note ELCN/26-27/0001 raised against the invoice |
+| C9 | D2C on shipping (BR-48) | COD order shipped 8 Oct: invoice dated 8 Oct issued by the batch; RTO on 14 Oct drafts a credit note for review; an order with no address goes to the fix-list without stopping the batch |
+| C10 | CRM invoice API (F105) | Create + issue from the CRM returns the invoice number and PDF link; the call is logged with the user and CRM order id |
+| C11 | Receipt with TDS (BR-38, BR-41) | Invoice Rs 1,18,000 (taxable Rs 1,00,000 + GST Rs 18,000); hotel deducts 2% on taxable and pays Rs 1,16,000: suggested receipt Rs 1,16,000 + TDS receivable Rs 2,000, invoice fully settled |
+| C12 | AR ageing and statement (F117, F082) | Outstanding by customer in Not due / 1-30 / 31-60 / 61-90 / 90+; customer statement PDF ties to the outstanding |
+| C13 | Settlement settles D2C invoices (BR-39) | A matched Razorpay settlement marks its orders' invoices paid and books fees and GST on fees; the bank credit is counted once |
+| C14 | Loans and covenant (BR-28) | Mesa Rs 12,00,000 disbursed 4 Jun 2026, flexible, repayable within 18 months: balance and days to the final due date shown; adding a loan that takes total debt above Rs 45,00,000 warns |
+| C15 | CA workbook (F180, F181) | One XLSX per month with the listed sheets; every row links to its file; GST working shows an HSN summary that ties to the invoices |
+| C16 | Phone width and no deletes | Invoice, receipt and claim screens usable at 375 px; deleting an issued invoice, receipt or loan record is refused and audited |

@@ -15,7 +15,8 @@ This folder is built to move into the Bloc monorepo (github.com/Mani212005/Bloc)
 | Decisions still open, and the founders' answers | `docs/open-questions.md` | Answers are typed in the Google Sheet; pull with `npm run spec:pull-answers` |
 | History of spec changes | `docs/changelog.md` | |
 | Phase 1 scope and acceptance tests | `docs/phase-1-plan.md` | Done (A1-A12 pass) |
-| Phase 2 scope and acceptance tests | `docs/phase-2-plan.md` | Start here when building Phase 2 (Steps 8-13) |
+| Phase 2 scope and acceptance tests | `docs/phase-2-plan.md` | Done (Steps 8-13; B1-B16 pass) |
+| Phase 3 scope and acceptance tests | `docs/phase-3-plan.md` | Start here when building Phase 3 (Steps 14-19) |
 | Database schema | `backend/prisma/schema.prisma` + `backend/prisma/sql/finance.sql` | `db/phase1_schema.sql` is the original draft, kept for reference only |
 
 Before implementing anything, read the relevant rows of `docs/spec.md` (by feature ID F###) and every rule it references in `docs/rules.md`. If code and docs disagree, the docs win unless the founder says otherwise; then update the docs.
