@@ -657,6 +657,41 @@ drop trigger if exists settlement_month_open on finance."SettlementBatch";
 create trigger settlement_month_open before insert on finance."SettlementBatch"
   for each row execute function finance.settlement_month_open();
 
+-- ---------------------------------------------------------------------------
+-- Customers and price lists (M08, M11)
+-- ---------------------------------------------------------------------------
+alter table finance."CustomerProfile" drop constraint if exists customer_profile_shape;
+alter table finance."CustomerProfile" add constraint customer_profile_shape check (
+  ("creditLimit" is null or "creditLimit" >= 0)
+  and ("channel" is null or "channel" in ('horeca', 'distributor', 'marketplace', 'd2c'))
+  and "profileKey" = "crmCompanyId" || ':' || coalesce("crmBranchId", '-')
+);
+alter table finance."PriceList" drop constraint if exists price_list_shape;
+alter table finance."PriceList" add constraint price_list_shape check (
+  "kind" in ('mrp', 'horeca', 'distributor', 'marketplace', 'other') and length(trim("name")) > 0
+);
+alter table finance."PriceListItem" drop constraint if exists price_list_item_shape;
+alter table finance."PriceListItem" add constraint price_list_item_shape check (
+  "price" > 0 and "minQty" >= 1 and ("effectiveTo" is null or "effectiveTo" >= "effectiveFrom")
+);
+
+-- A price that has been in force keeps its amount, product and start date: change it by ending it
+-- and adding a new one, so invoices already priced from it can always be explained.
+create or replace function finance.price_list_item_fixed() returns trigger
+language plpgsql as $$
+begin
+  if new."price" is distinct from old."price" or new."invProductId" is distinct from old."invProductId"
+     or new."minQty" is distinct from old."minQty" or new."effectiveFrom" is distinct from old."effectiveFrom"
+     or new."priceListId" is distinct from old."priceListId" then
+    raise exception 'finance: a price cannot be edited; end it and add the new price from its date'
+      using errcode = 'P0014';
+  end if;
+  return new;
+end $$;
+drop trigger if exists price_list_item_fixed on finance."PriceListItem";
+create trigger price_list_item_fixed before update on finance."PriceListItem"
+  for each row execute function finance.price_list_item_fixed();
+
 -- Attach the audit, actor-stamp and no-delete triggers to every finance table except AuditLog.
 -- New tables pick them up on the next `npm run db:sync`.
 do $$

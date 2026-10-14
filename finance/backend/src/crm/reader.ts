@@ -4,8 +4,8 @@ import { Decimal } from '../lib/money';
 
 /**
  * CRM reader (D15, I01, I02): the only way Finance reads CRM data. Read only.
- * Until the apps share a database it reads the stub table finance_stub."Order" (same name and
- * columns as the CRM's public."Order"). Setting CRM_DATABASE_URL points the very same query at the
+ * Until the apps share a database it reads the stub tables in schema crm_stub (same table and
+ * column names as the CRM's public schema). Setting CRM_DATABASE_URL points the very same query at the
  * CRM's database (schema CRM_SCHEMA, default public): a config change, nothing else.
  * [Verify] the live path against the CRM database once Finance runs on the same server (Q33).
  */
@@ -30,6 +30,11 @@ export type CrmOrder = {
   shippedAt: string | null;
   deliveredAt: string | null;
   cancelledAt: string | null;
+  contactId: string | null;
+  billingBranchId: string | null;
+  /** COMPANY (billed to an outlet) or PERSONAL; null when no company is involved. */
+  orderFor: string | null;
+  gstNumber: string | null;
 };
 
 let live: PrismaClient | null = null;
@@ -37,10 +42,14 @@ let live: PrismaClient | null = null;
 export const crmReaderMode = () => (process.env.CRM_DATABASE_URL ? 'live' : 'stub');
 function source() {
   const url = process.env.CRM_DATABASE_URL;
-  if (!url) return { client: prisma as PrismaClient, table: Prisma.raw('finance_stub."Order"') };
+  if (!url) return { client: prisma as PrismaClient, schema: 'crm_stub' };
   live ??= new PrismaClient({ datasourceUrl: url });
-  const schema = (process.env.CRM_SCHEMA ?? 'public').replace(/[^a-z0-9_]/gi, '');
-  return { client: live, table: Prisma.raw(`"${schema}"."Order"`) };
+  return { client: live, schema: (process.env.CRM_SCHEMA ?? 'public').replace(/[^a-z0-9_]/gi, '') };
+}
+/** A CRM table in whichever schema the reader points at. */
+function crm(table: string) {
+  const { client, schema } = source();
+  return { client, table: Prisma.raw(`"${schema}"."${table}"`) };
 }
 
 /** A timestamp as the business date in India. */
@@ -52,6 +61,7 @@ type Row = {
   id: string; orderNumber: string; channel: string; paymentMethod: string; totalAmount: Prisma.Decimal; advancePaid: Prisma.Decimal; balanceDue: Prisma.Decimal;
   customerName: string; phone: string; email: string | null; shopifyOrderId: string | null; status: string; shiprocketAwbNumber: string | null;
   replacementOfId: string | null; createdAt: Date; shippedAt: Date | null; deliveredAt: Date | null; cancelledAt: Date | null;
+  contactId: string | null; billingBranchId: string | null; orderFor: string | null; gstNumber: string | null;
 };
 
 function view(r: Row): CrmOrder {
@@ -60,15 +70,17 @@ function view(r: Row): CrmOrder {
     totalAmount: new Decimal(r.totalAmount), advancePaid: new Decimal(r.advancePaid ?? 0), balanceDue: new Decimal(r.balanceDue ?? 0),
     customerName: r.customerName, phone: r.phone, email: r.email, shopifyOrderId: r.shopifyOrderId, status: String(r.status), awb: r.shiprocketAwbNumber,
     isReplacement: !!r.replacementOfId, orderDate: istDate(r.createdAt)!, shippedAt: istDate(r.shippedAt), deliveredAt: istDate(r.deliveredAt), cancelledAt: istDate(r.cancelledAt),
+    contactId: r.contactId, billingBranchId: r.billingBranchId, orderFor: r.orderFor === null ? null : String(r.orderFor), gstNumber: r.gstNumber,
   };
 }
 
 const COLUMNS = Prisma.sql`"id", "orderNumber", "channel"::text as "channel", "paymentMethod"::text as "paymentMethod", "totalAmount", "advancePaid", "balanceDue",
-  "customerName", "phone", "email", "shopifyOrderId", "status"::text as "status", "shiprocketAwbNumber", "replacementOfId", "createdAt", "shippedAt", "deliveredAt", "cancelledAt"`;
+  "customerName", "phone", "email", "shopifyOrderId", "status"::text as "status", "shiprocketAwbNumber", "replacementOfId", "createdAt", "shippedAt", "deliveredAt", "cancelledAt",
+  "contactId", "billingBranchId", "orderFor"::text as "orderFor", "gstNumber"`;
 
 /** Orders placed between two business dates (inclusive), or with the given numbers. */
-export async function crmOrders(f: { from?: string; to?: string; orderNumbers?: string[] }): Promise<CrmOrder[]> {
-  const { client, table } = source();
+export async function crmOrders(f: { from?: string; to?: string; orderNumbers?: string[]; billingBranchIds?: string[]; contactIds?: string[] }): Promise<CrmOrder[]> {
+  const { client, table } = crm('Order');
   const where: Prisma.Sql[] = [];
   if (f.from) where.push(Prisma.sql`"createdAt" >= ${istStart(f.from)}`);
   if (f.to) where.push(Prisma.sql`"createdAt" < ${new Date(istStart(f.to).getTime() + 86_400_000)}`);
@@ -76,10 +88,65 @@ export async function crmOrders(f: { from?: string; to?: string; orderNumbers?: 
     if (!f.orderNumbers.length) return [];
     where.push(Prisma.sql`"orderNumber" in (${Prisma.join(f.orderNumbers)})`);
   }
+  // A company's orders: billed to one of its outlets, or placed for it by one of its people.
+  if (f.billingBranchIds || f.contactIds) {
+    const or: Prisma.Sql[] = [];
+    if (f.billingBranchIds?.length) or.push(Prisma.sql`"billingBranchId" in (${Prisma.join(f.billingBranchIds)})`);
+    if (f.contactIds?.length) or.push(Prisma.sql`("contactId" in (${Prisma.join(f.contactIds)}) and coalesce("orderFor"::text, '') = 'COMPANY')`);
+    if (!or.length) return [];
+    where.push(Prisma.sql`(${Prisma.join(or, ' or ')})`);
+  }
   const rows = await client.$queryRaw<Row[]>`select ${COLUMNS} from ${table} ${where.length ? Prisma.sql`where ${Prisma.join(where, ' and ')}` : Prisma.empty} order by "createdAt" desc`;
   return rows.map(view);
 }
 
 export async function crmOrder(orderNumber: string): Promise<CrmOrder | null> {
   return (await crmOrders({ orderNumbers: [orderNumber] }))[0] ?? null;
+}
+
+// ---------- Customers (F080): companies, their outlets and their people ----------
+
+export type CrmBranch = {
+  id: string; companyId: string; name: string; addressLine1: string | null; addressLine2: string | null; city: string | null;
+  state: string | null; pincode: string | null; gstNumber: string | null; isActive: boolean;
+};
+export type CrmCompany = {
+  id: string; name: string; chainType: string; branches: CrmBranch[];
+  contacts: { id: string; name: string | null; phone: string; email: string | null; role: string | null }[];
+};
+
+/**
+ * Companies (B2B customers) with their outlets and active contacts. D2C buyers are not customers
+ * here: their invoices carry the order's own name and address (BR-49).
+ */
+export async function crmCompanies(f: { ids?: string[]; q?: string } = {}): Promise<CrmCompany[]> {
+  const c = crm('Company');
+  const where: Prisma.Sql[] = [];
+  if (f.ids) {
+    if (!f.ids.length) return [];
+    where.push(Prisma.sql`"id" in (${Prisma.join(f.ids)})`);
+  }
+  if (f.q?.trim()) where.push(Prisma.sql`"name" ilike ${`%${f.q.trim()}%`}`);
+  const companies = await c.client.$queryRaw<{ id: string; name: string; chainType: string }[]>`
+    select "id", "name", "chainType"::text as "chainType" from ${c.table} ${where.length ? Prisma.sql`where ${Prisma.join(where, ' and ')}` : Prisma.empty} order by "name"`;
+  if (!companies.length) return [];
+  const ids = companies.map((x) => x.id);
+  const b = crm('CompanyBranch');
+  const branches = await b.client.$queryRaw<CrmBranch[]>`
+    select "id", "companyId", "name", "address" as "addressLine1", "addressLine2", "city", "state", "pincode", "gstNumber", "isActive"
+    from ${b.table} where "companyId" in (${Prisma.join(ids)}) order by "name"`;
+  const cc = crm('CompanyContact');
+  const ct = crm('Contact');
+  const people = await cc.client.$queryRaw<{ companyId: string; id: string; name: string | null; phone: string; email: string | null; role: string | null }[]>`
+    select l."companyId", p."id", p."name", p."phoneNumber" as "phone", p."email", l."role"::text as "role"
+    from ${cc.table} l join ${ct.table} p on p."id" = l."contactId" where l."isActive" and l."companyId" in (${Prisma.join(ids)})`;
+  return companies.map((x) => ({
+    ...x,
+    branches: branches.filter((br) => br.companyId === x.id),
+    contacts: people.filter((p) => p.companyId === x.id).map(({ companyId: _c, ...p }) => p),
+  }));
+}
+
+export async function crmCompany(id: string): Promise<CrmCompany | null> {
+  return (await crmCompanies({ ids: [id] }))[0] ?? null;
 }

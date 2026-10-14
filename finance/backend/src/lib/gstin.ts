@@ -72,3 +72,20 @@ export function isValidPan(pan: string): boolean {
 export function isValidIfsc(ifsc: string): boolean {
   return IFSC_REGEX.test((ifsc || '').trim().toUpperCase());
 }
+
+/** "Karnataka", "karnataka", "29" or "KA-29" style inputs to the GST state code; null if unknown. */
+export function stateCodeFromName(value: string | null | undefined): string | null {
+  const v = (value ?? '').trim();
+  if (!v) return null;
+  const digits = v.match(/^\d{1,2}$/);
+  if (digits) {
+    const code = v.padStart(2, '0');
+    return GST_STATE_CODES[code] ? code : null;
+  }
+  const key = v.toLowerCase().replace(/[^a-z]/g, '');
+  const hit = Object.entries(GST_STATE_CODES).find(([, name]) => name.toLowerCase().replace(/[^a-z]/g, '') === key);
+  if (hit) return hit[0];
+  // Common short or older names.
+  const alias: Record<string, string> = { orissa: '21', pondicherry: '34', delhincr: '07', newdelhi: '07', jk: '01', jammukashmir: '01', telengana: '36' };
+  return alias[key] ?? null;
+}

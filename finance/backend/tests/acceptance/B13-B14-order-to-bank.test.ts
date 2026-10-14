@@ -10,7 +10,7 @@ import { loggedInFounder, seedOnce } from '../setup/fixtures';
 // Phase 2 acceptance B13 (expected settlement date, BR-45) and B14 (three-level tie-out, BR-47), with
 // the order-to-bank flows of Step 13: Razorpay payments and settlement linked to CRM orders and to the
 // IDFC credit (F192, F194), a COD remittance by AWB (F193), a direct transfer (F195) and the
-// discrepancy queue (F196, BR-46). Orders sit in the reader stubs (finance_stub), as the CRM and
+// discrepancy queue (F196, BR-46). Orders sit in the reader stubs (crm_stub, inv_stub), as the CRM and
 // bloc-inv would hold them.
 const csv = (text: string) => Buffer.from(text.trim() + '\n').toString('base64');
 const HEADER = 'Transaction Date,Value Date,Particulars,Cheque No.,Debit,Credit,Balance\n';

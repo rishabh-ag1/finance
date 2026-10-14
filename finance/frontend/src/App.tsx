@@ -34,6 +34,10 @@ import { ClaimPage } from './pages/claims/ClaimPage';
 import { ReimbursementPage } from './pages/claims/ReimbursementPage';
 import { ForecastPage } from './pages/ForecastPage';
 import { OrderToBankPage } from './pages/orders/OrderToBankPage';
+import { CustomersPage } from './pages/customers/CustomersPage';
+import { CustomerPage } from './pages/customers/CustomerPage';
+import { ProductsPage } from './pages/customers/ProductsPage';
+import { PriceListPage } from './pages/customers/PriceListPage';
 import { OrderPage } from './pages/orders/OrderPage';
 import { SettlementPage } from './pages/orders/SettlementPage';
 
@@ -79,6 +83,12 @@ function App() {
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeTds" requiredAction="view" />}>
                   <Route path="/tds" element={<TdsPage />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeCustomers" requiredAction="view" />}>
+                  <Route path="/customers" element={<CustomersPage />} />
+                  <Route path="/customers/:id" element={<CustomerPage />} />
+                  <Route path="/products" element={<ProductsPage />} />
+                  <Route path="/products/price-lists/:id" element={<PriceListPage />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeOrders" requiredAction="view" />}>
                   <Route path="/order-to-bank" element={<OrderToBankPage />} />

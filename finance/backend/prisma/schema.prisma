@@ -1,7 +1,7 @@
 // Entelechy Finance - Prisma schema.
 // Same conventions as Bloc's crm/backend/prisma/schema.prisma: multiSchema, cuid string ids,
 // PascalCase models with camelCase columns, schema changes via `prisma db push` (no migrations dir).
-// Every model lives in the Postgres schema "finance" (reader stubs in "finance_stub"). Finance never writes to the CRM's schemas.
+// Every model lives in the Postgres schema "finance" (reader stubs in "crm_stub" and "inv_stub"). Finance never writes to the CRM's schemas.
 // What Prisma cannot express (audit triggers, no-hard-delete triggers, check constraints) is in
 // prisma/sql/finance.sql, applied by `npm run db:sync` right after the push.
 // Every model must have a single `id` column: the audit trigger keys AuditLog rows on it.
@@ -15,7 +15,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["finance", "finance_stub"]
+  schemas  = ["finance", "crm_stub", "inv_stub"]
 }
 
 // ---------- Users, roles & audit (M16) ----------
@@ -1306,14 +1306,19 @@ model Reimbursement {
 // ============================================================================
 
 // ---------- Reader stubs (D15) ----------
-// Stand-ins for the CRM's public."Order" and bloc-inv's "OutgoingOrder", same table and column
-// names, in their own schema "finance_stub". The CRM and Inventory readers query them with the same
-// SQL they will run against the real databases (CRM_DATABASE_URL / INVENTORY_DATABASE_URL). Finance
-// code never writes here; only tests and the stub loader do. No audit triggers: not Finance's data.
+// Stand-ins for the other apps' tables, with the same table and column names, in their own
+// schemas: "crm_stub" mirrors the CRM's public schema, "inv_stub" bloc-inv's. The CRM and
+// Inventory readers run the very same SQL against the real databases once CRM_DATABASE_URL /
+// INVENTORY_DATABASE_URL are set. Finance code never writes here; only tests and the stub loader
+// do. No audit triggers: not Finance's data. Only the columns Finance reads are mirrored.
 
 model CrmOrder {
   id                   String    @id @default(cuid())
   orderNumber          String    @unique
+  contactId            String?
+  orderFor             String?
+  billingBranchId      String?
+  gstNumber            String?
   channel              String
   paymentMethod        String
   totalAmount          Decimal   @db.Decimal(10, 2)
@@ -1335,7 +1340,65 @@ model CrmOrder {
   updatedAt            DateTime  @updatedAt
 
   @@map("Order")
-  @@schema("finance_stub")
+  @@schema("crm_stub")
+}
+
+model CrmCompany {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  chainType String   @default("SINGLE_OUTLET")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("Company")
+  @@schema("crm_stub")
+}
+
+/// The CRM's outlet. Its address line 1 is the database column "address".
+model CrmCompanyBranch {
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  addressLine1 String?  @map("address")
+  addressLine2 String?
+  city         String?
+  state        String?
+  pincode      String?
+  gstNumber    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("CompanyBranch")
+  @@schema("crm_stub")
+}
+
+model CrmContact {
+  id          String   @id @default(cuid())
+  contactCode String   @unique
+  phoneNumber String   @unique
+  name        String?
+  email       String?
+  contactType String   @default("B2C")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("Contact")
+  @@schema("crm_stub")
+}
+
+model CrmCompanyContact {
+  id        String   @id @default(cuid())
+  companyId String
+  contactId String
+  role      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, contactId])
+  @@map("CompanyContact")
+  @@schema("crm_stub")
 }
 
 model InvOutgoingOrder {
@@ -1356,7 +1419,36 @@ model InvOutgoingOrder {
   updatedAt     DateTime  @updatedAt
 
   @@map("OutgoingOrder")
-  @@schema("finance_stub")
+  @@schema("inv_stub")
+}
+
+model InvProduct {
+  id           String   @id @default(cuid())
+  name         String
+  sku          String   @unique
+  skuNumber    String   @unique
+  hsnCode      String?
+  aliases      String[] @default([])
+  priceExclTax Decimal  @db.Decimal(12, 2)
+  taxRate      Decimal  @default(18.00) @db.Decimal(5, 2)
+  priceInclTax Decimal  @db.Decimal(12, 2)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("Product")
+  @@schema("inv_stub")
+}
+
+model InvProductCost {
+  id        String   @id @default(cuid())
+  productId String
+  unitCost  Decimal  @db.Decimal(12, 2)
+  validFrom DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@map("ProductCost")
+  @@schema("inv_stub")
 }
 
 // ---------- Finance's own records ----------
@@ -1588,5 +1680,79 @@ model ReconDiscrepancy {
 
   @@index([status, typeCode])
   @@index([orderNumber])
+  @@schema("finance")
+}
+
+// ============================================================================
+// M08 Customers and M11 Products & price lists (Phase 3, Step 14)
+// ============================================================================
+
+/// F081: Finance's own fields for a CRM company (crmBranchId null) or one of its outlets.
+/// An outlet row overrides its company's row field by field; empty fields fall back to the
+/// company's, then to the defaults (payment terms On delivery, deducts TDS No).
+model CustomerProfile {
+  id             String   @id @default(cuid())
+  entityId       String
+  /// crmCompanyId:crmBranchId, or crmCompanyId:- for the company row (unique, so nulls cannot repeat).
+  profileKey     String   @unique
+  crmCompanyId   String
+  crmBranchId    String?
+  paymentTermId  String?
+  creditLimit    Decimal? @db.Decimal(14, 2)
+  invoiceEmails  String[] @default([])
+  deductsTds     Boolean?
+  tdsSectionId   String?
+  priceListId    String?
+  /// horeca, distributor, marketplace or d2c
+  channel        String?
+  /// Outlet rows: bill another outlet of the same company (e.g. the head office) instead.
+  billToBranchId String?
+  notes          String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  createdBy      String?
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy      String?
+
+  @@index([crmCompanyId])
+  @@schema("finance")
+}
+
+/// F121: MRP / HoReCa / Distributor / Marketplace price lists. Prices are never edited in place:
+/// a new price is a new item from its own date; the old one gets an end date.
+model PriceList {
+  id           String          @id @default(cuid())
+  name         String          @unique
+  /// mrp, horeca, distributor, marketplace or other
+  kind         String
+  taxInclusive Boolean         @default(false)
+  isActive     Boolean         @default(true)
+  notes        String?
+  createdAt    DateTime        @default(now()) @db.Timestamptz(6)
+  createdBy    String?
+  updatedAt    DateTime        @updatedAt @db.Timestamptz(6)
+  updatedBy    String?
+  items        PriceListItem[]
+
+  @@schema("finance")
+}
+
+model PriceListItem {
+  id            String    @id @default(cuid())
+  priceListId   String
+  /// bloc-inv product id (Inventory reader), with its SKU kept for reading.
+  invProductId  String
+  sku           String
+  price         Decimal   @db.Decimal(14, 2)
+  minQty        Int       @default(1)
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+  isArchived    Boolean   @default(false)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy     String?
+  priceList     PriceList @relation(fields: [priceListId], references: [id])
+
+  @@index([priceListId, invProductId])
   @@schema("finance")
 }

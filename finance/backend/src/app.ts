@@ -16,6 +16,7 @@ import paymentRoutes from './routes/payment.routes';
 import tdsRoutes from './routes/tds.routes';
 import claimRoutes from './routes/claim.routes';
 import reconRoutes from './routes/recon.routes';
+import customerRoutes from './routes/customer.routes';
 import { DeleteRefusedError, refuseDelete } from './lib/audit';
 import { UserError } from './lib/http';
 
@@ -54,6 +55,7 @@ export function createApp() {
     app.use('/api/tds', tdsRoutes);
     app.use('/api/claims', claimRoutes);
     app.use('/api/recon', reconRoutes);
+    app.use('/api', customerRoutes);
 
     // No hard deletes anywhere (BR-43, A9): every DELETE is refused and leaves an audit row.
     app.delete('/api/:resource/:id', async (req: Request, res: Response, next: NextFunction) => {

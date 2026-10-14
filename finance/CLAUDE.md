@@ -84,7 +84,7 @@ Recorded as D11-D13 in `docs/spec.md` README (and the Google Sheet). Check this 
 
 6. **No email sending**: POs, reminders and invoices are downloaded or shared until a mail account for finance@blocinsects.com is set up (D13 item 6, D14).
 7. **Razorpay and Shiprocket** are built from their documented formats and tested on made-up data until read-only keys and one real settlement / remittance file are shared (D13 item 7). Razorpay comes in as report files (Payments, Settlement Recon) until then; check the column names against a real file of each first (`backend/src/recon/files.ts`).
-8. **CRM and Inventory readers read stub tables** (schema `finance_stub`, tables `Order` and `OutgoingOrder`, empty on the development PC). Once Finance runs on the CRM's server, set `CRM_DATABASE_URL` (and `CRM_SCHEMA` if not `public`) and `INVENTORY_DATABASE_URL` in `backend/.env`; the same queries then read the real tables. Test that live path first (Q33).
+8. **CRM and Inventory readers read stub tables** (schemas `crm_stub` and `inv_stub`, with the CRM's and bloc-inv's table and column names, empty on the development PC). Once Finance runs on the CRM's server, set `CRM_DATABASE_URL` (and `CRM_SCHEMA` if not `public`) and `INVENTORY_DATABASE_URL` in `backend/.env`; the same queries then read the real tables. Test that live path first (Q33).
 
 ## No migration of old data
 
