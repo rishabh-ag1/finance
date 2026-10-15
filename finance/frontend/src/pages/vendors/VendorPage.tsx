@@ -3,6 +3,7 @@ import { useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Circle } from 'lucide-react';
 import api from '../../api';
+import { HistoryPanel } from '../../components/HistoryPanel';
 import { Button, Card, Chip, ErrorNote, Facts, Field, Modal, PageHeader, TextInput } from '../../components/ui/kit';
 import { useAuth } from '../../context/auth';
 import { formatDateTime } from '../../lib/format';
@@ -12,6 +13,7 @@ import { dateLabel } from '../settings/api';
 import { categoryText, isZero, useCategories } from '../bank/ledgerApi';
 import { TxnPanel } from '../bank/TxnPanel';
 import { VendorForm } from './VendorForm';
+import { VendorMoney } from './VendorMoney';
 import { Attachments } from '../../components/Attachments';
 import { MSME_LABEL, STATUS_CHIP, TYPE_LABEL, type Vendor, type VendorStatus } from './types';
 
@@ -149,6 +151,8 @@ export function VendorPage() {
         <Attachments recordType="Vendor" recordId={v.id} kinds={[...v.documents.filter((d) => !d.present && (d.required || d.kind === 'agreement')).map((d) => d.kind), 'other']} onChange={refresh} />
       </Card>
 
+      <VendorMoney vendorId={v.id} />
+
       <Card className="p-4 space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-semibold text-gray-900">Payments</h2>
@@ -182,6 +186,7 @@ export function VendorPage() {
           onClose={() => setRejecting(null)} onSave={(note) => decide.mutate({ bankId: rejecting, approve: false, note })} />
       )}
       {openTxn && <TxnPanel id={openTxn} onClose={() => setOpenTxn(null)} />}
+      <HistoryPanel recordId={v.id} />
     </div>
   );
 }

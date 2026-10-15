@@ -34,7 +34,7 @@ const bankAccountSchema = z.object({
     bankName: z.string().min(2),
     accountName: z.string().min(2),
     accountNumber: z.string().min(4),
-    ifsc: z.string().min(11).max(11),
+    ifsc: z.string().max(11).optional().default(''),
     branch: optText,
     accountType: z.enum(['business_current', 'cash_credit', 'founder_personal', 'loan', 'wallet', 'card']),
     owner: z.string().min(1),

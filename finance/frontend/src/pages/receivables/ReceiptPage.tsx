@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../api';
+import { HistoryPanel } from '../../components/HistoryPanel';
 import { Button, Card, Chip, ErrorNote, Facts, Field, MoneyInput, PageHeader } from '../../components/ui/kit';
 import { useAuth } from '../../context/auth';
 import { formatINR } from '../../lib/money';
@@ -127,6 +128,7 @@ export function ReceiptPage() {
           )}
         </Card>
       )}
+      <HistoryPanel recordId={id!} />
     </div>
   );
 }

@@ -310,6 +310,7 @@ export function txnView(t: BankTxn) {
     debit: moneyText(t.debit),
     credit: moneyText(t.credit),
     balance: moneyText(t.balance),
+    isManual: t.isManual,
     parseOk: t.parseOk,
     mode: t.mode,
     modeDetail: t.modeDetail,

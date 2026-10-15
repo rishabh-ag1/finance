@@ -1,7 +1,8 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
+import * as bankLink from '../services/bankLink.service';
 import { requirePermission } from '../middleware/auth.middleware';
-import { handler, parseBody, zMoney } from '../lib/http';
+import { handler, parseBody, zDate, zMoney } from '../lib/http';
 import { refuseDelete } from '../lib/audit';
 import * as bankImport from '../bank/import.service';
 import * as ledger from '../bank/ledger.service';
@@ -82,6 +83,15 @@ router.post('/txns/:id/split', edit, handler((req) => ledger.split(ctx(req), id(
 router.post('/txns/:id/unsplit', edit, handler((req) => ledger.unsplit(ctx(req), id(req), parseBody(z.object({ reason: z.string() }), req.body).reason)));
 router.post('/txns/:id/unpair', edit, handler((req) => ledger.unpair(ctx(req), id(req), parseBody(z.object({ reason: z.string() }), req.body).reason)));
 router.post('/rerun-rules', edit, handler((req) => ledger.rerunRules(ctx(req))));
+// F022 manual cash / wallet entries; F020 link a row to any document.
+router.post('/manual', edit, handler((req) => ledger.addManualEntry(ctx(req), parseBody(z.object({
+    bankAccountId: z.string().min(1), txnDate: zDate, description: z.string(), amount: z.string(), direction: z.enum(['in', 'out']), note: z.string(),
+}), req.body))));
+router.get('/txns/:id/documents', view, handler((req) => bankLink.documentsForRow(id(req))));
+router.post('/txns/:id/link', edit, handler((req) => {
+    const b = parseBody(z.object({ type: z.enum(bankLink.LINK_TYPES), docId: z.string().min(1) }), req.body);
+    return bankLink.linkRowTo(ctx(req), id(req), b.type, b.docId);
+}));
 // A9: bank rows are never deleted; ignore them with a note instead.
 router.delete('/txns/:id', edit, handler((req) => refuseDelete(ctx(req), 'BankTxn', id(req))));
 

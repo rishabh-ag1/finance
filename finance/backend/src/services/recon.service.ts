@@ -15,6 +15,7 @@ import { IN_TRANSIT, ORDER_STATUS_LABEL, ROUTE_LABEL, orderPaymentStatus, type C
 import { tieOut } from '../recon/tieOut';
 import { upload } from './attachment.service';
 import { settleOrderInvoices } from './receivables.service';
+import { daysToBank, funnelByMonth, type FunnelRow } from '../recon/funnel';
 import {
   batchCandidates, linkBatchRow, linkLinesToOrders, linkOrderRow, linkPaymentsToOrders, matchBatches, reconRules, reconSetting, routeOf, unlinkBankRow, type Rules,
 } from './reconMatch.service';
@@ -658,3 +659,17 @@ export async function removeHoliday(ctx: AuditContext, id: string) {
   return getReconSettings();
 }
 
+
+// ---------- D36 funnel and D37 days to bank ----------
+
+/** Where each month's order value is, and how fast money reaches the bank by route, for orders placed in the range. */
+export async function orderFunnel(from: string, to: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new UserError('Choose the period');
+  const r = await reconRules();
+  const all = (await states(await crmOrders({ from, to }), r)).filter((s) => s.state.status !== 'nothing_due' && s.state.status !== 'not_tracked');
+  const rows: FunnelRow[] = all.map((s) => ({
+    orderMonth: s.order.orderDate.slice(0, 7), orderDate: s.order.orderDate, route: s.state.route, status: s.state.status,
+    orderValue: s.order.totalAmount, collected: new Decimal(s.state.collected ?? 0), bankDate: s.state.bankDate,
+  }));
+  return { from, to, months: funnelByMonth(rows), daysToBank: daysToBank(rows) };
+}

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
 import api from '../../api';
+import { HistoryPanel } from '../../components/HistoryPanel';
 import { Button, Card, Chip, ErrorNote, Facts, Field, Modal, MoneyInput, PageHeader, Select, TextInput } from '../../components/ui/kit';
 import { useAuth } from '../../context/auth';
 import { fileUrl } from '../../lib/attachments';
@@ -217,6 +218,7 @@ export function SalesDocPage() {
           <ErrorNote>{act.isError && apiErrorMessage(act.error, 'Could not save')}</ErrorNote>
         </Modal>
       )}
+      <HistoryPanel recordId={id!} />
     </div>
   );
 }

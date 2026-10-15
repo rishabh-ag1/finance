@@ -419,3 +419,37 @@ export async function rerunRules(ctx: AuditContext) {
   const suggested = await withAudit({ ...ctx, reason: 'Rules re-run' }, (tx) => autoCategorise(tx, ids), { timeoutMs: 120_000 });
   return { checked: ids.length, suggested };
 }
+
+// ---------- F022 manual entries (cash, wallets: accounts without a statement) ----------
+
+export type ManualEntryInput = { bankAccountId: string; txnDate: string; description: string; amount: string; direction: 'in' | 'out'; note: string };
+
+/**
+ * A cash or wallet transaction that no statement will bring. Only on accounts that are not
+ * imported from a statement (no parser), appended after the account's last entry so the running
+ * balance stays right. Needs a note (or a file added after); shown with a 'manual' badge.
+ */
+export async function addManualEntry(ctx: AuditContext, input: ManualEntryInput) {
+  const account = await prisma.bankAccount.findUnique({ where: { id: input.bankAccountId } });
+  if (!account || account.isArchived) throw new UserError('Choose an account');
+  if (account.parserFormat) throw new UserError('This account comes from bank statements: its rows are imported, not typed (BR-01). Use a cash or wallet account.');
+  const amount = parseMoney(input.amount, 'Amount');
+  if (amount.lessThanOrEqualTo(0)) throw new UserError('Enter the amount');
+  if (!input.description.trim()) throw new UserError('Say what it was');
+  if (!input.note.trim()) throw new UserError('Add a note (who, why); attach the bill or receipt after saving');
+  const date = parseDate(input.txnDate, 'Date');
+  const last = await prisma.bankTxn.findFirst({ where: { bankAccountId: account.id }, orderBy: [{ txnDate: 'desc' }, { seq: 'desc' }] });
+  if (last && date < last.txnDate) throw new UserError(`Entries are added in date order: the last one on this account is ${dateText(last.txnDate)}`);
+  if (date < account.openingDate) throw new UserError('The date is before the account\'s opening date');
+  const prev = last?.balance ?? account.openingBalance;
+  const balance = input.direction === 'in' ? prev.plus(amount) : prev.minus(amount);
+  const seq = (await prisma.bankTxn.count({ where: { bankAccountId: account.id, txnDate: date } })) + 1;
+  const t = await withAudit({ ...ctx, reason: ctx.reason ?? 'Manual entry' }, (tx) => tx.bankTxn.create({
+    data: {
+      entityId: account.entityId, bankAccountId: account.id, seq, txnDate: date, narrationRaw: input.description.trim(), debit: input.direction === 'out' ? amount : new Decimal(0),
+      credit: input.direction === 'in' ? amount : new Decimal(0), balance, dedupeKey: `manual:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`, parseOk: true,
+      isManual: true, notes: input.note.trim(), status: 'review', categorisationReason: 'Manual entry: choose its category',
+    },
+  }));
+  return getTxn(t.id);
+}

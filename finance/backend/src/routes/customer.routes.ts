@@ -2,6 +2,7 @@ import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { requirePermission } from '../middleware/auth.middleware';
 import { handler, parseBody, zDate } from '../lib/http';
+import { todayIST } from '../lib/fy';
 import * as customers from '../services/customer.service';
 
 // M08 Customers (F080-F082) and M11 Products & price lists (F120, F121).
@@ -26,7 +27,7 @@ router.get('/products', view, handler(() => customers.listProducts()));
 router.get('/products/:id/price', view, handler((req) => customers.linePrice({
     invProductId: id(req), companyId: typeof req.query.companyId === 'string' ? req.query.companyId : null,
     branchId: typeof req.query.branchId === 'string' ? req.query.branchId : null,
-    date: typeof req.query.date === 'string' ? req.query.date : new Date().toISOString().slice(0, 10), qty: Number(req.query.qty ?? 1) || 1,
+    date: typeof req.query.date === 'string' ? req.query.date : todayIST(), qty: Number(req.query.qty ?? 1) || 1,
 })));
 
 const listSchema = z.object({ name: z.string().min(2), kind: z.enum(customers.PRICE_LIST_KINDS), taxInclusive: z.boolean(), notes: opt, isActive: z.boolean().optional() });

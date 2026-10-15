@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
 import api from '../../api';
+import { HistoryPanel } from '../../components/HistoryPanel';
 import { Attachments } from '../../components/Attachments';
 import { Button, Card, Chip, ErrorNote, Facts, Field, Modal, PageHeader, Select, TextInput } from '../../components/ui/kit';
 import { useAuth } from '../../context/auth';
@@ -152,6 +153,7 @@ export function PaymentPage() {
           <ErrorNote>{act.isError && apiErrorMessage(act.error, 'That did not work')}</ErrorNote>
         </Modal>
       )}
+      <HistoryPanel recordId={id!} />
     </div>
   );
 }

@@ -19,6 +19,7 @@ export const FINANCE_MODULES = {
     financeSales: 'Proformas, invoices and credit notes',
     financeReceivables: 'Receipts, outstanding and collections',
     financeFunding: 'Capital, loans and the debt covenant',
+    financeCaPack: 'Monthly CA pack and GST working',
     financeDocuments: 'Documents vault',
     financeUsers: 'Users and roles',
     financeAudit: 'Audit log',
@@ -33,4 +34,9 @@ export function adminPermissions(): RolePermissions {
     return Object.fromEntries(
         Object.keys(FINANCE_MODULES).map((m) => [m, { view: true, edit: true }]),
     );
+}
+
+/** Whether a role's permissions allow an action on a module (the same test requirePermission makes). */
+export function hasPermission(permissions: unknown, module: string, action: PermissionAction): boolean {
+    return (permissions as Record<string, Record<string, boolean>> | null | undefined)?.[module]?.[action] === true;
 }

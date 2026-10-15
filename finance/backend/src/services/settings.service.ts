@@ -137,8 +137,9 @@ export type BankAccountInput = {
 };
 
 function bankAccountData(input: BankAccountInput) {
-    const ifsc = input.ifsc.trim().toUpperCase();
-    if (!isValidIfsc(ifsc)) throw new UserError('IFSC must be 4 letters, then 0, then 6 letters or digits (e.g. IDFB0080152)');
+    const ifsc = (input.ifsc ?? '').trim().toUpperCase();
+    // A cash box or wallet has no IFSC (F022); every bank account does.
+    if (!(input.accountType === 'wallet' && !ifsc) && !isValidIfsc(ifsc)) throw new UserError('IFSC must be 4 letters, then 0, then 6 letters or digits (e.g. IDFB0080152)');
     const accountNumber = input.accountNumber.replace(/\s/g, '');
     if (!/^[A-Za-z0-9]{4,30}$/.test(accountNumber)) throw new UserError('Account number must be 4 to 30 letters or digits');
     const isCc = input.accountType === 'cash_credit';

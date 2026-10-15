@@ -114,8 +114,8 @@ alter table finance."BankAccount" drop constraint if exists bank_account_cc_limi
 alter table finance."BankAccount" add constraint bank_account_cc_limit           -- BR-50
   check ("accountType" <> 'cash_credit' or "sanctionedLimit" is not null);
 alter table finance."BankAccount" drop constraint if exists bank_account_ifsc;
-alter table finance."BankAccount" add constraint bank_account_ifsc
-  check ("ifsc" ~ '^[A-Z]{4}0[A-Z0-9]{6}$');
+alter table finance."BankAccount" add constraint bank_account_ifsc   -- a cash box / wallet has none (F022)
+  check ("ifsc" ~ '^[A-Z]{4}0[A-Z0-9]{6}$' or ("accountType" = 'wallet' and "ifsc" = ''));
 
 alter table finance."GstRate" drop constraint if exists gst_rate_range;
 alter table finance."GstRate" add constraint gst_rate_range

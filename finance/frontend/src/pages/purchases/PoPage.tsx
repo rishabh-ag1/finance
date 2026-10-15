@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Download, Send } from 'lucide-react';
 import api from '../../api';
+import { HistoryPanel } from '../../components/HistoryPanel';
 import { Attachments } from '../../components/Attachments';
 import { Button, Card, Chip, ErrorNote, Facts, Field, Modal, PageHeader, TextInput } from '../../components/ui/kit';
 import { useAuth } from '../../context/auth';
@@ -220,6 +221,7 @@ export function PoPage() {
           <ErrorNote>{act.isError && apiErrorMessage(act.error, 'That did not work')}</ErrorNote>
         </Modal>
       )}
+      <HistoryPanel recordId={id!} />
     </div>
   );
 }

@@ -97,7 +97,7 @@ describe.skipIf(!hasDb)('Acceptance C11-C13: receivables', () => {
     expect(old.total).toBe('23600.00');
     const ageing = (await agent.get('/api/receivables/ageing')).body.data;
     const mine = ageing.rows.find((r: { companyId: string }) => r.companyId === companyId);
-    const days = Math.round((Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`) - Date.parse('2026-09-01T00:00:00Z')) / 86_400_000);
+    const days = Math.round((Date.parse(`${new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)}T00:00:00Z`) - Date.parse('2026-09-01T00:00:00Z')) / 86_400_000);
     const bucket = days <= 30 ? '1_30' : days <= 60 ? '31_60' : days <= 90 ? '61_90' : '90_plus';
     expect(mine).toMatchObject({ name: hotel, total: '23600.00' });
     expect(mine.buckets[bucket]).toBe('23600.00');
@@ -105,7 +105,7 @@ describe.skipIf(!hasDb)('Acceptance C11-C13: receivables', () => {
     expect(out.rows.map((r: { docNumber: string }) => r.docNumber)).toEqual([old.docNumber]);
     expect(out.rows[0]).toMatchObject({ overdue: true, daysOverdue: days });
 
-    const to = new Date().toISOString().slice(0, 10);
+    const to = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
     const s = (await agent.get(`/api/receivables/statement/${companyId}`).query({ from: '2026-09-01', to })).body.data;
     expect(s).toMatchObject({ opening: '0.00', closing: '23600.00', outstanding: '23600.00', advances: '0.00' });
     expect(s.lines.map((l: { kind: string }) => l.kind)).toEqual(['invoice', 'invoice', 'receipt']);

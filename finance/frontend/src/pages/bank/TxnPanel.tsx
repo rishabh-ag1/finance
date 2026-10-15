@@ -11,6 +11,8 @@ import { apiErrorMessage } from '../../lib/utils';
 import { dateLabel } from '../settings/api';
 import { CategoryFields, type CategoryValue } from './CategoryFields';
 import { Attachments } from '../../components/Attachments';
+import { LinkDocument } from './LinkDocument';
+import { LINKED_LABEL, linkedRecordPath } from './linked';
 import {
   categoryText, isZero, NATURE_LABEL, PARTY_LABEL, RELATED_LABEL, STATUS_LABEL, useCategories, useRefreshBank,
   type PartyType, type RelatedPartyType, type TxnDetail,
@@ -64,7 +66,8 @@ export function TxnPanel({ id, onClose }: { id: string; onClose: () => void }) {
             { label: 'Category', value: t.status === 'split' ? `Split into ${t.splits.length} lines` : catText ?? <span className="text-amber-700">Not categorised</span> },
             { label: 'Nature', value: t.nature ? NATURE_LABEL[t.nature] : '—' },
             { label: 'Why', value: t.categorisationReason },
-            ...(t.linkedDocType === 'PaymentOut' && t.linkedDocId ? [{ label: 'Payment', value: <Link to={`/payments/${t.linkedDocId}`} className="text-blue-700 hover:underline">Open the payment</Link> }] : []),
+            ...(t.linkedDocType && t.linkedDocId ? [{ label: 'Linked to', value: linkedRecordPath(t.linkedDocType, t.linkedDocId) ? <Link to={linkedRecordPath(t.linkedDocType, t.linkedDocId)!} className="text-blue-700 hover:underline">{LINKED_LABEL[t.linkedDocType] ?? t.linkedDocType}</Link> : (LINKED_LABEL[t.linkedDocType] ?? t.linkedDocType) }] : []),
+            ...(t.isManual ? [{ label: 'Entry', value: <Chip tone="blue">Manual</Chip> }] : []),
             { label: 'Party type', value: t.partyType ? PARTY_LABEL[t.partyType] : '—' },
             ...(t.nature === 'related_party' ? [{ label: 'Related party treatment', value: RELATED_LABEL[t.relatedPartyType ?? 'undecided'] }] : []),
             { label: 'Description', value: t.description },
@@ -98,6 +101,8 @@ export function TxnPanel({ id, onClose }: { id: string; onClose: () => void }) {
               {t.status === 'ignored' && <Button variant="secondary" disabled={act.isPending} onClick={() => act.mutate({ path: 'restore' })}>Restore to review</Button>}
             </div>
           )}
+
+          {canEdit && !t.linkedDocId && ['review', 'suggested', 'categorised'].includes(t.status) && <LinkDocument txnId={t.id} onDone={refresh} />}
 
           <div className="border-t border-gray-100 pt-3">
             <p className="text-sm font-medium text-gray-700 mb-1">Files</p>

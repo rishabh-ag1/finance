@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../api';
+import { HistoryPanel } from '../../components/HistoryPanel';
 import { Attachments } from '../../components/Attachments';
 import { Button, Card, Chip, ErrorNote, Facts, Field, Modal, MoneyInput, PageHeader, TextInput } from '../../components/ui/kit';
 import { useAuth } from '../../context/auth';
@@ -155,6 +156,7 @@ export function LoanPage() {
         <Attachments recordType="Loan" recordId={l.id} kinds={['agreement', 'proof', 'other']} />
       </Card>
       {paying && <RepaymentForm loan={l} onClose={() => setPaying(false)} />}
+      <HistoryPanel recordId={id!} />
     </div>
   );
 }

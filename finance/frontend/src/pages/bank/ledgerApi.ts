@@ -35,7 +35,7 @@ export type Split = { id: string; lineNo: number; amount: string; categoryId: st
 
 export type LedgerTxn = {
   id: string; bankAccountId: string; bankName: string; accountNumberMasked: string; txnDate: string; narrationRaw: string;
-  debit: string; credit: string; balance: string | null; parseOk: boolean; mode: string | null; modeDetail: string | null;
+  debit: string; credit: string; balance: string | null; isManual?: boolean; parseOk: boolean; mode: string | null; modeDetail: string | null;
   utr: string | null; counterpartyName: string | null; counterpartyIfsc: string | null; counterpartyAccount: string | null;
   remark: string | null; description: string | null; categoryId: string | null; subCategoryId: string | null; nature: Nature | null;
   partyType: PartyType | null; status: TxnStatus; categorisationReason: string | null; notes: string | null;

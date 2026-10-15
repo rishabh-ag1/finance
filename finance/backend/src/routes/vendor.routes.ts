@@ -1,5 +1,6 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
+import * as vendorLedger from '../services/vendorLedger.service';
 import { requirePermission } from '../middleware/auth.middleware';
 import { handler, parseBody, zDate, zMoney } from '../lib/http';
 import { refuseDelete } from '../lib/audit';
@@ -58,6 +59,17 @@ router.get('/', view, handler((req) => vendors.listVendors({
 })));
 router.post('/', edit, handler((req) => vendors.createVendor(ctx(req), parseBody(vendorSchema.extend({ activate: z.boolean().optional() }), req.body))));
 router.get('/:id', view, handler((req) => vendors.getVendor(id(req))));
+// F038 vendor 360 and statement.
+router.get('/:id/overview', view, handler((req) => vendorLedger.vendorOverview(id(req))));
+router.get('/:id/statement', view, handler((req) => vendorLedger.vendorStatement(id(req), String(req.query.from), String(req.query.to))));
+router.get('/:id/statement.pdf', view, async (req, res, next) => {
+    try {
+        const f = await vendorLedger.vendorStatementPdf(id(req), String(req.query.from), String(req.query.to));
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${f.name.replace(/[^\w .-]/g, '_')}"`);
+        res.send(f.pdf);
+    } catch (e) { next(e); }
+});
 router.put('/:id', edit, handler((req) => vendors.updateVendor(ctx(req), id(req), parseBody(vendorSchema, req.body))));
 router.post('/:id/status', edit, handler((req) => {
     const b = parseBody(z.object({ status: z.enum(['draft', 'pending_review', 'active', 'blocked']), reason: opt }), req.body);

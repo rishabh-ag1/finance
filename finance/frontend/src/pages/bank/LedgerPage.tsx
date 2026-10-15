@@ -7,6 +7,8 @@ import { formatINR } from '../../lib/money';
 import { useSettings, type BankAccount } from '../settings/api';
 import { LedgerRows } from './LedgerRows';
 import { TxnPanel } from './TxnPanel';
+import { ManualEntry } from './ManualEntry';
+import { useAuth } from '../../context/auth';
 import { NATURE_LABEL, STATUS_LABEL, useCategories, type LedgerPage as Page, type Nature, type TxnStatus } from './ledgerApi';
 
 const FILTERS = ['accountId', 'from', 'to', 'status', 'nature', 'categoryId', 'subCategoryId', 'direction', 'q'] as const;
@@ -16,6 +18,8 @@ const FILTERS = ['accountId', 'from', 'to', 'status', 'nature', 'categoryId', 's
 export function LedgerPage() {
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const { hasPermission } = useAuth();
   const { data: accounts } = useSettings<BankAccount[]>('bank-accounts');
   const { data: cats } = useCategories();
   const filter = Object.fromEntries(FILTERS.map((k) => [k, params.get(k) ?? '']));
@@ -39,7 +43,8 @@ export function LedgerPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
-      <PageHeader title="Bank ledger" subtitle="Every bank row with its category and nature. Click a row to categorise, split, ignore or see its history." />
+      <PageHeader title="Bank ledger" subtitle="Every bank row with its category and nature. Click a row to categorise, split, link, ignore or see its history." action={hasPermission('financeBank', 'edit') && <Button variant="secondary" onClick={() => setAdding(true)}>Cash entry</Button>} />
+      {adding && <ManualEntry onClose={() => setAdding(false)} onSaved={(id) => { setAdding(false); setOpen(id); }} />}
 
       <Card className="p-3 sm:p-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

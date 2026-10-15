@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import api from '../../api';
+import { FunnelTab } from './FunnelTab';
 import { Button, Card, Chip, ErrorNote, Field, Modal, PageHeader, Select, TextInput } from '../../components/ui/kit';
 import { useAuth } from '../../context/auth';
 import { formatDateTime } from '../../lib/format';
@@ -14,7 +15,7 @@ import {
   type Discrepancy, type InTransit, type SettlementRow, type Tracker,
 } from './api';
 
-const TABS = [['tracker', 'Orders'], ['discrepancies', 'Discrepancies'], ['settlements', 'Settlements'], ['import', 'Import reports']] as const;
+const TABS = [['tracker', 'Orders'], ['discrepancies', 'Discrepancies'], ['settlements', 'Settlements'], ['funnel', 'Funnel'], ['import', 'Import reports']] as const;
 const short = (v: string | null | undefined) => formatINR(v ?? '0', { decimals: false });
 
 // F197 money in transit.
@@ -336,6 +337,7 @@ export function OrderToBankPage() {
       {tab === 'tracker' && <TrackerTab />}
       {tab === 'discrepancies' && <DiscrepanciesTab />}
       {tab === 'settlements' && <SettlementsTab />}
+      {tab === 'funnel' && <FunnelTab />}
       {tab === 'import' && <ImportTab />}
     </div>
   );

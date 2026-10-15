@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
-import { Banknote, ChartColumn, Percent, ClipboardList, FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings, Tags, Truck, Upload, UserRound, Wand2, type LucideIcon, CalendarRange, WalletCards, ArrowRightLeft, Building2, Package, FileSpreadsheet, HandCoins, PiggyBank } from 'lucide-react';
+import { Banknote, ChartColumn, Percent, ClipboardList, FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings, Tags, Truck, Upload, UserRound, Wand2, type LucideIcon, CalendarRange, WalletCards, ArrowRightLeft, Building2, Package, FileSpreadsheet, HandCoins, PiggyBank, FileDown, Users } from 'lucide-react';
+import { AlertsBell } from './AlertsBell';
 import { useAuth } from '../context/auth';
 import { cn } from '../lib/utils';
 import { useReviewCount } from '../pages/bank/ledgerApi';
@@ -39,9 +40,11 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/products', label: 'Products & prices', icon: Package, module: 'financeCustomers' },
   { to: '/funding', label: 'Funding & loans', icon: PiggyBank, module: 'financeFunding' },
   { to: '/order-to-bank', label: 'Order-to-bank', icon: ArrowRightLeft, module: 'financeOrders', badge: 'discrepancies' },
+  { to: '/ca-pack', label: 'CA pack', icon: FileDown, module: 'financeCaPack' },
   { to: '/documents', label: 'Documents', icon: FileText, module: 'financeDocuments' },
   { to: '/categories', label: 'Categories', icon: Tags, module: 'financeSettings' },
   { to: '/settings', label: 'Settings', icon: Settings, module: 'financeSettings' },
+  { to: '/users', label: 'Users and roles', icon: Users, module: 'financeUsers' },
   { to: '/audit', label: 'Audit log', icon: History, module: 'financeAudit' },
 ];
 
@@ -81,6 +84,7 @@ export function AppLayout() {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
+            {user && <AlertsBell />}
             {user && (
               <NavLink to="/account" className="flex items-center gap-2" title="Your account">
                 <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-semibold">
