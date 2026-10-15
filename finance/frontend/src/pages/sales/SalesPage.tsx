@@ -27,7 +27,9 @@ export function SalesPage() {
         title="Invoices"
         subtitle="Proformas, tax invoices and credit notes. Numbers are taken only when a document is issued."
         action={hasPermission('financeSales', 'edit') && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 justify-end">
+            <Link to="/sales/d2c" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-800 hover:bg-gray-50">D2C</Link>
+            <Link to="/sales/refills" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-800 hover:bg-gray-50">Refills</Link>
             <Link to="/sales/new?type=proforma" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-800 hover:bg-gray-50"><Plus className="w-4 h-4" /> Proforma</Link>
             <Link to="/sales/new?type=tax_invoice" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-[#0c2c55] text-white hover:bg-[#0e3261]"><Plus className="w-4 h-4" /> Invoice</Link>
           </div>
@@ -61,7 +63,7 @@ export function SalesPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-medium text-gray-900 truncate">{d.docNumber ?? `Draft ${d.docTypeLabel.toLowerCase()}`} · {d.customerName}</div>
-                  <div className="text-xs text-gray-500 truncate">{d.docTypeLabel} · {dateLabel(d.docDate)} · {d.supplyType.toUpperCase()}{d.customerGstin ? ` · ${d.customerGstin}` : ''}{d.crmOrderNumber ? ` · ${d.crmOrderNumber}` : ''}</div>
+                  <div className="text-xs text-gray-500 truncate">{d.docTypeLabel} · {dateLabel(d.docDate)} · {d.supplyType.toUpperCase()}{d.customerGstin ? ` · ${d.customerGstin}` : ''}{d.crmOrderNumber ? ` · ${d.crmOrderNumber}` : ''}{d.source !== 'manual' ? ` · ${d.sourceLabel}` : ''}</div>
                 </div>
                 <div className="text-right shrink-0">
                   <div className="num font-medium">{d.docType === 'credit_note' ? '−' : ''}{formatINR(d.total)}</div>

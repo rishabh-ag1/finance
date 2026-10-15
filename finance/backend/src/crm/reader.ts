@@ -35,7 +35,16 @@ export type CrmOrder = {
   /** COMPANY (billed to an outlet) or PERSONAL; null when no company is involved. */
   orderFor: string | null;
   gstNumber: string | null;
+  gstApplicable: boolean;
+  /** Delivery address snapshot on the order. */
+  shipping: OrderAddress;
+  /** Billing address: the delivery address unless the order says otherwise. */
+  billing: OrderAddress;
+  deliveryMethod: string;
+  codCharges: Decimal;
+  returnedAt: string | null;
 };
+export type OrderAddress = { line1: string | null; line2: string | null; city: string | null; state: string | null; pincode: string | null };
 
 let live: PrismaClient | null = null;
 /** 'stub' until CRM_DATABASE_URL is set. */
@@ -62,21 +71,30 @@ type Row = {
   customerName: string; phone: string; email: string | null; shopifyOrderId: string | null; status: string; shiprocketAwbNumber: string | null;
   replacementOfId: string | null; createdAt: Date; shippedAt: Date | null; deliveredAt: Date | null; cancelledAt: Date | null;
   contactId: string | null; billingBranchId: string | null; orderFor: string | null; gstNumber: string | null;
+  gstApplicable: boolean | null; addressLine1: string | null; addressLine2: string | null; city: string | null; state: string | null; pincode: string | null;
+  billingSameAsShipping: boolean | null; billingAddressLine1: string | null; billingAddressLine2: string | null; billingCity: string | null; billingState: string | null; billingPincode: string | null;
+  deliveryMethod: string | null; codCharges: Prisma.Decimal | null; returnedAt: Date | null;
 };
 
 function view(r: Row): CrmOrder {
+  const shipping = { line1: r.addressLine1, line2: r.addressLine2, city: r.city, state: r.state, pincode: r.pincode };
   return {
     id: r.id, orderNumber: r.orderNumber, channel: String(r.channel), paymentMethod: String(r.paymentMethod),
     totalAmount: new Decimal(r.totalAmount), advancePaid: new Decimal(r.advancePaid ?? 0), balanceDue: new Decimal(r.balanceDue ?? 0),
     customerName: r.customerName, phone: r.phone, email: r.email, shopifyOrderId: r.shopifyOrderId, status: String(r.status), awb: r.shiprocketAwbNumber,
     isReplacement: !!r.replacementOfId, orderDate: istDate(r.createdAt)!, shippedAt: istDate(r.shippedAt), deliveredAt: istDate(r.deliveredAt), cancelledAt: istDate(r.cancelledAt),
     contactId: r.contactId, billingBranchId: r.billingBranchId, orderFor: r.orderFor === null ? null : String(r.orderFor), gstNumber: r.gstNumber,
+    gstApplicable: !!r.gstApplicable, shipping, deliveryMethod: String(r.deliveryMethod ?? 'COURIER'), codCharges: new Decimal(r.codCharges ?? 0), returnedAt: istDate(r.returnedAt),
+    billing: r.billingSameAsShipping === false && (r.billingAddressLine1 || r.billingCity)
+      ? { line1: r.billingAddressLine1, line2: r.billingAddressLine2, city: r.billingCity, state: r.billingState, pincode: r.billingPincode }
+      : shipping,
   };
 }
 
 const COLUMNS = Prisma.sql`"id", "orderNumber", "channel"::text as "channel", "paymentMethod"::text as "paymentMethod", "totalAmount", "advancePaid", "balanceDue",
   "customerName", "phone", "email", "shopifyOrderId", "status"::text as "status", "shiprocketAwbNumber", "replacementOfId", "createdAt", "shippedAt", "deliveredAt", "cancelledAt",
-  "contactId", "billingBranchId", "orderFor"::text as "orderFor", "gstNumber"`;
+  "contactId", "billingBranchId", "orderFor"::text as "orderFor", "gstNumber", "gstApplicable", "addressLine1", "addressLine2", "city", "state", "pincode",
+  "billingSameAsShipping", "billingAddressLine1", "billingAddressLine2", "billingCity", "billingState", "billingPincode", "deliveryMethod"::text as "deliveryMethod", "codCharges", "returnedAt"`;
 
 /** Orders placed between two business dates (inclusive), or with the given numbers. */
 export async function crmOrders(f: { from?: string; to?: string; orderNumbers?: string[]; billingBranchIds?: string[]; contactIds?: string[] }): Promise<CrmOrder[]> {
@@ -102,6 +120,35 @@ export async function crmOrders(f: { from?: string; to?: string; orderNumbers?: 
 
 export async function crmOrder(orderNumber: string): Promise<CrmOrder | null> {
   return (await crmOrders({ orderNumbers: [orderNumber] }))[0] ?? null;
+}
+
+/** Orders shipped, cancelled or returned on or after a business date (the D2C batch's window, F102). */
+export async function crmOrdersMovedSince(day: string): Promise<CrmOrder[]> {
+  const { client, table } = crm('Order');
+  const t = istStart(day);
+  const rows = await client.$queryRaw<Row[]>`select ${COLUMNS} from ${table}
+    where "shippedAt" >= ${t} or "cancelledAt" >= ${t} or "returnedAt" >= ${t} or ("createdAt" >= ${t} and "status"::text in ('SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELLED'))
+    order by "createdAt"`;
+  return rows.map(view);
+}
+
+export type CrmOrderLine = {
+  orderId: string; productName: string; sku: string; invProductId: string | null; qty: number;
+  mrp: Decimal; discountAmount: Decimal; finalAmount: Decimal; priceBeforeTax: Decimal; taxPercent: Decimal;
+};
+
+/** An order's lines with the product they sell (the CRM product carries bloc-inv's id, not the HSN). */
+export async function crmOrderLines(orderIds: string[]): Promise<CrmOrderLine[]> {
+  if (!orderIds.length) return [];
+  const i = crm('OrderItem');
+  const p = crm('Product');
+  const rows = await i.client.$queryRaw<{ orderId: string; productName: string; sku: string; invProductId: string | null; quantity: number; mrp: Prisma.Decimal; discountAmount: Prisma.Decimal; finalAmount: Prisma.Decimal; priceBeforeTax: Prisma.Decimal; taxPercent: Prisma.Decimal }[]>`
+    select i."orderId", p."name" as "productName", p."sku", p."invProductId", i."quantity", i."mrp", i."discountAmount", i."finalAmount", i."priceBeforeTax", i."taxPercent"
+    from ${i.table} i join ${p.table} p on p."id" = i."productId" where i."orderId" in (${Prisma.join(orderIds)}) order by i."id"`;
+  return rows.map((r) => ({
+    orderId: r.orderId, productName: r.productName, sku: r.sku, invProductId: r.invProductId, qty: Number(r.quantity),
+    mrp: new Decimal(r.mrp), discountAmount: new Decimal(r.discountAmount), finalAmount: new Decimal(r.finalAmount), priceBeforeTax: new Decimal(r.priceBeforeTax), taxPercent: new Decimal(r.taxPercent),
+  }));
 }
 
 // ---------- Customers (F080): companies, their outlets and their people ----------
@@ -145,6 +192,13 @@ export async function crmCompanies(f: { ids?: string[]; q?: string } = {}): Prom
     branches: branches.filter((br) => br.companyId === x.id),
     contacts: people.filter((p) => p.companyId === x.id).map(({ companyId: _c, ...p }) => p),
   }));
+}
+
+/** The company an outlet belongs to (an order billed to an outlet names only the outlet). */
+export async function crmBranchCompanyId(branchId: string): Promise<string | null> {
+  const b = crm('CompanyBranch');
+  const rows = await b.client.$queryRaw<{ companyId: string }[]>`select "companyId" from ${b.table} where "id" = ${branchId}`;
+  return rows[0]?.companyId ?? null;
 }
 
 export async function crmCompany(id: string): Promise<CrmCompany | null> {

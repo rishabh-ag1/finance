@@ -387,7 +387,8 @@
 - **Trigger:** CRM order moves to Shipped (Shiprocket pickup, or marked Shipped manually for Porter / self-delivery)
 - **Logic:** For goods, the tax invoice is issued at or before removal of goods, so the D2C invoice is issued when the order ships, not on delivery. Prepaid orders cancelled before shipping: no invoice, refund only. Orders RTO'd or cancelled after shipping: credit note against the invoice (auto-drafted, F103).
 - **Worked example:** COD order shipped 8 Oct, invoice ELPL/26-27/00042 issued 8 Oct; RTO on 14 Oct creates credit note ELCN/26-27/0005.
-- **Confidence:** High on timing. [Verify] RTO credit note handling with CA.
+- **As built (Step 16):** the ship date is the CRM's shippedAt, else bloc-inv's (whichever is earlier when both exist). Not invoiced by the batch: company orders, replacements and FREE orders, Amazon, orders not shipped, orders cancelled before shipping, orders shipped before the start date. The invoice matches what the customer paid: for each CRM line, taxable = line paid / (1 + GST rate), rate = the CRM's price before tax, discount = rate x qty - taxable; COD charges are a separate line taxed at the goods' rate under their HSN (Q37). Example: Trap Pro at MRP ₹4,999 (₹4,236.44 before tax) sold at ₹4,499 with ₹49 COD: line rate ₹4,236.44, discount ₹423.73, taxable ₹3,812.71, GST ₹686.29; COD line taxable ₹41.53, GST ₹7.48; total ₹4,548, same as the order. A total more than ₹1 away from the order's goes to the fix-list. The credit note is drafted once, for all invoice lines, reason RTO, dated the return or cancel date, and issued by a founder.
+- **Confidence:** High on timing. [Verify] RTO credit note handling and the tax treatment of COD charges with CA (Q37).
 
 ## BR-49 - B2B vs B2C invoice
 

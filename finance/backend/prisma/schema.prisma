@@ -1332,6 +1332,24 @@ model CrmOrder {
   status               String    @default("CONFIRMED")
   shiprocketAwbNumber  String?
   replacementOfId      String?
+  /// Delivery address snapshot, and the billing address when it differs (BR-48, BR-49).
+  addressLine1          String?
+  addressLine2          String?
+  city                  String?
+  state                 String?
+  pincode               String?
+  billingSameAsShipping Boolean   @default(true)
+  billingAddressLine1   String?
+  billingAddressLine2   String?
+  billingCity           String?
+  billingState          String?
+  billingPincode        String?
+  gstApplicable         Boolean   @default(false)
+  deliveryMethod        String    @default("COURIER")
+  subtotal              Decimal   @default(0) @db.Decimal(10, 2)
+  discount              Decimal   @default(0) @db.Decimal(10, 2)
+  orderDiscountAmount   Decimal   @default(0) @db.Decimal(10, 2)
+  codCharges            Decimal?  @db.Decimal(10, 2)
   createdAt            DateTime  @default(now())
   shippedAt            DateTime?
   deliveredAt          DateTime?
@@ -1340,6 +1358,41 @@ model CrmOrder {
   updatedAt            DateTime  @updatedAt
 
   @@map("Order")
+  @@schema("crm_stub")
+}
+
+/// The CRM's order line: mrp is per unit with GST, discountAmount the money off one unit,
+/// finalAmount the line total the customer pays (GST included).
+model CrmOrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  productId      String
+  quantity       Int
+  mrp            Decimal @db.Decimal(10, 2)
+  discountAmount Decimal @db.Decimal(10, 2)
+  finalAmount    Decimal @db.Decimal(10, 2)
+  priceBeforeTax Decimal @db.Decimal(10, 2)
+  taxAmount      Decimal @db.Decimal(10, 2)
+  taxPercent     Decimal @db.Decimal(5, 2)
+
+  @@index([orderId])
+  @@map("OrderItem")
+  @@schema("crm_stub")
+}
+
+/// The CRM's copy of a bloc-inv product (invProductId); it has no HSN, which comes from bloc-inv.
+model CrmProduct {
+  id             String   @id @default(cuid())
+  name           String
+  sku            String   @unique
+  mrp            Decimal  @db.Decimal(10, 2)
+  taxPercent     Decimal  @db.Decimal(5, 2)
+  priceBeforeTax Decimal  @db.Decimal(10, 2)
+  invProductId   String?  @unique
+  isActive       Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+
+  @@map("Product")
   @@schema("crm_stub")
 }
 
@@ -1824,6 +1877,9 @@ model SalesDocument {
   igst              Decimal            @default(0) @db.Decimal(14, 2)
   roundOff          Decimal            @default(0) @db.Decimal(14, 2)
   total             Decimal            @default(0) @db.Decimal(14, 2)
+  /// manual, d2c_batch (F102), crm_api (F105), refill (F099) or rto (F103).
+  source            String             @default("manual")
+  refillPlanId      String?
   /// Tax invoice made from this proforma (BR-33).
   proformaId        String?
   /// Credit note: the invoice it reduces, and why (return, rate_difference, discount, other).
@@ -1848,6 +1904,7 @@ model SalesDocument {
   @@index([docDate])
   @@index([proformaId])
   @@index([againstInvoiceId])
+  @@index([crmOrderNumber])
   @@schema("finance")
 }
 
@@ -1930,5 +1987,110 @@ model Gstr1Filing {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
   updatedBy String?
 
+  @@schema("finance")
+}
+
+// ============================================================================
+// M09 D2C invoicing, CRM invoice API, refill plans (Phase 3, Step 16)
+// ============================================================================
+
+/// F102 batch settings. Off until a founder switches it on; orders shipped before startFrom are left alone.
+model D2cInvoiceSetting {
+  id             String    @id @default(cuid())
+  entityId       String    @unique
+  isOn           Boolean   @default(false)
+  startFrom      DateTime? @db.Date
+  /// The founder who switched it on: the batch's audit rows carry this user.
+  runAsUserId    String?
+  lastRunAt      DateTime? @db.Timestamptz(6)
+  /// { checked, invoiced, fixList, creditNotes, skipped, note }
+  lastRunSummary Json?
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy      String?
+
+  @@schema("finance")
+}
+
+/// One row per D2C order the batch has handled: invoiced, or on the fix-list with its problems.
+model D2cOrderInvoice {
+  id            String    @id @default(cuid())
+  orderNumber   String    @unique
+  /// invoiced or fix
+  state         String
+  problems      String[]  @default([])
+  invoiceId     String?
+  creditNoteId  String?
+  lastCheckedAt DateTime  @default(now()) @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy     String?
+
+  @@index([state])
+  @@schema("finance")
+}
+
+/// F105: a key the CRM uses to call the invoice API. Only its hash is kept; the key is shown once.
+model CrmApiKey {
+  id            String    @id @default(cuid())
+  name          String
+  keyPrefix     String
+  keyHash       String    @unique
+  /// The Finance user the CRM's calls are recorded under (with the CRM user's name in each log row).
+  actsAsUserId  String
+  lastUsedAt    DateTime? @db.Timestamptz(6)
+  revokedAt     DateTime? @db.Timestamptz(6)
+  revokedReason String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy     String?
+
+  @@schema("finance")
+}
+
+/// F105: every call the CRM makes, with the CRM user and order.
+model CrmApiCall {
+  id             String   @id @default(cuid())
+  keyId          String?
+  crmUser        String?
+  method         String
+  path           String
+  crmOrderNumber String?
+  docId          String?
+  docNumber      String?
+  statusCode     Int
+  error          String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  createdBy      String?
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy      String?
+
+  @@index([createdAt])
+  @@index([crmOrderNumber])
+  @@schema("finance")
+}
+
+/// F099: a sachet refill plan for an outlet. Each cycle drafts a tax invoice for review.
+model RefillPlan {
+  id           String    @id @default(cuid())
+  crmCompanyId String
+  crmBranchId  String
+  invProductId String
+  qty          Decimal   @db.Decimal(12, 3)
+  /// Rate before GST; empty takes the outlet's price list (F121).
+  rate         Decimal?  @db.Decimal(14, 2)
+  everyMonths  Int       @default(1)
+  nextDate     DateTime  @db.Date
+  isActive     Boolean   @default(true)
+  notes        String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy    String?
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy    String?
+
+  @@index([crmCompanyId])
   @@schema("finance")
 }

@@ -38,6 +38,8 @@ import { CustomersPage } from './pages/customers/CustomersPage';
 import { SalesPage } from './pages/sales/SalesPage';
 import { SalesFormPage } from './pages/sales/SalesFormPage';
 import { SalesDocPage } from './pages/sales/SalesDocPage';
+import { D2cPage } from './pages/sales/D2cPage';
+import { RefillsPage } from './pages/sales/RefillsPage';
 import { CustomerPage } from './pages/customers/CustomerPage';
 import { ProductsPage } from './pages/customers/ProductsPage';
 import { PriceListPage } from './pages/customers/PriceListPage';
@@ -90,6 +92,8 @@ function App() {
                 <Route element={<ProtectedRoute requiredModule="financeSales" requiredAction="view" />}>
                   <Route path="/sales" element={<SalesPage />} />
                   <Route path="/sales/new" element={<SalesFormPage mode="new" />} />
+                  <Route path="/sales/d2c" element={<D2cPage />} />
+                  <Route path="/sales/refills" element={<RefillsPage />} />
                   <Route path="/sales/:id" element={<SalesDocPage />} />
                   <Route path="/sales/:id/edit" element={<SalesFormPage mode="edit" />} />
                 </Route>

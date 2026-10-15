@@ -9,13 +9,15 @@ export const STATUS_TONE: Record<string, 'gray' | 'green' | 'amber' | 'red' | 'b
   draft: 'amber', issued: 'green', cancelled: 'red', discarded: 'gray', converted: 'blue', partly_converted: 'blue', expired: 'gray', accepted: 'green',
 };
 export const STATUSES: [string, string][] = [['draft', 'Draft'], ['issued', 'Issued'], ['partly_converted', 'Partly converted'], ['converted', 'Converted'], ['expired', 'Expired'], ['cancelled', 'Cancelled'], ['discarded', 'Discarded']];
-export const CREDIT_REASONS: [string, string][] = [['return', 'Goods returned'], ['rate_difference', 'Rate difference'], ['discount', 'Discount after sale'], ['other', 'Other']];
+export const CREDIT_REASONS: [string, string][] = [['return', 'Goods returned'], ['rto', 'Returned to origin (RTO) or cancelled after dispatch'], ['rate_difference', 'Rate difference'], ['discount', 'Discount after sale'], ['other', 'Other']];
 
 export type Party = { name: string; address: string; stateCode: string | null; gstin: string | null; phone?: string | null; email?: string | null };
 export type DocRow = {
   id: string; docType: SalesDocType; docTypeLabel: string; docNumber: string | null; docDate: string; status: string; statusLabel: string;
   customerName: string; customerGstin: string | null; supplyType: 'b2b' | 'b2c'; placeOfSupply: string; crmCompanyId: string | null; crmOrderNumber: string | null;
   taxable: string; tax: string; total: string; dueDate: string | null; validUntil: string | null; sent: boolean; salesPerson: string | null;
+  /** manual, d2c_batch, crm_api, refill or rto */
+  source: string; sourceLabel: string; refillPlanId: string | null;
 };
 export type DocLine = {
   id: string; lineNo: number; invProductId: string | null; sku: string | null; description: string; hsnSac: string | null; qty: string; unit: string; rate: string;

@@ -1,7 +1,7 @@
 import type { InvoiceTemplate, Prisma, SalesDocument, SalesDocumentLine } from '@prisma/client';
 import QRCode from 'qrcode';
 import { prisma } from '../config/database';
-import { crmCompany } from '../crm/reader';
+import { crmBranchCompanyId, crmCompany, crmOrder, type OrderAddress } from '../crm/reader';
 import { invProducts } from '../inventory/reader';
 import { withAudit, type AuditContext, type Tx } from '../lib/audit';
 import { resolveProfile } from '../lib/customers';
@@ -28,8 +28,9 @@ import { getCompany } from './settings.service';
  */
 
 export const DOC_LABEL: Record<SalesDocType, string> = { proforma: 'Proforma invoice', tax_invoice: 'Tax invoice', credit_note: 'Credit note' };
-export const CREDIT_REASONS = ['return', 'rate_difference', 'discount', 'other'] as const;
-export const CREDIT_REASON_LABEL: Record<string, string> = { return: 'Goods returned', rate_difference: 'Rate difference', discount: 'Discount after sale', other: 'Other' };
+export const CREDIT_REASONS = ['return', 'rto', 'rate_difference', 'discount', 'other'] as const;
+export const CREDIT_REASON_LABEL: Record<string, string> = { return: 'Goods returned', rto: 'Returned to origin (RTO) or cancelled after dispatch', rate_difference: 'Rate difference', discount: 'Discount after sale', other: 'Other' };
+export const SOURCE_LABEL: Record<string, string> = { manual: 'Made here', d2c_batch: 'D2C batch', crm_api: 'From the CRM', refill: 'Refill plan', rto: 'RTO credit note' };
 export const FONTS = ['inter', 'roboto', 'lato', 'noto-serif'] as const;
 
 const zero = () => new Decimal(0);
@@ -51,10 +52,14 @@ export type LineInput = {
   rate?: string | null; discountPct?: string | null; gstRate?: string | null; sourceLineId?: string | null;
   /** Kept when a stored line is re-checked (price list, proforma), else 'typed'. */
   priceSource?: string | null;
+  /** Discount in rupees (an order's discount, F102); wins over discountPct. */
+  discount?: string | null;
 };
 export type CustomerInput =
   | { kind: 'outlet'; companyId: string; branchId: string; shipToBranchId?: string | null }
-  | { kind: 'one_off'; name: string; address: string; state: string; gstin?: string | null; phone?: string | null; email?: string | null; shipTo?: { name: string; address: string; state: string } | null };
+  | { kind: 'one_off'; name: string; address: string; state: string; gstin?: string | null; phone?: string | null; email?: string | null; shipTo?: { name: string; address: string; state: string } | null }
+  /** A CRM order (F102, F105): billed to its outlet when ordered for a company, else to the buyer from the order's own address. */
+  | { kind: 'order'; orderNumber: string };
 export type DocInput = {
   docType: 'proforma' | 'tax_invoice';
   docDate: string;
@@ -70,7 +75,27 @@ const outletAddress = (b: { addressLine1: string | null; addressLine2: string | 
   [b.addressLine1, b.addressLine2, [b.city, b.pincode].filter(Boolean).join(' ')].filter((x) => x && String(x).trim()).join(', ');
 
 /** Bill-to and ship-to from a CRM outlet (with 'bill invoices to' from the outlet's profile) or typed. */
-async function parties(c: CustomerInput) {
+const orderAddress = (a: OrderAddress) => [a.line1, a.line2, [a.city, a.pincode].filter(Boolean).join(' ')].filter((x) => x && String(x).trim()).join(', ');
+
+type Parties = {
+  billTo: Party; shipTo: { name: string; address: string; stateCode: string | null } | null; crmCompanyId: string | null; crmBranchId: string | null;
+  shipToBranchId: string | null; profile: ReturnType<typeof resolveProfile> | null;
+};
+
+async function parties(c: CustomerInput): Promise<Parties> {
+  if (c.kind === 'order') {
+    const o = await crmOrder(c.orderNumber);
+    if (!o) throw new UserError(`Order ${c.orderNumber} is not in the CRM`);
+    if (o.orderFor === 'COMPANY' && o.billingBranchId) {
+      const companyId = await crmBranchCompanyId(o.billingBranchId);
+      if (companyId) return parties({ kind: 'outlet', companyId, branchId: o.billingBranchId });
+    }
+    const gstin = o.gstApplicable ? text(o.gstNumber) : null;
+    const billTo: Party = { name: o.customerName.trim(), address: orderAddress(o.billing), stateCode: stateCodeFromName(o.billing.state ?? ''), gstin, phone: text(o.phone), email: text(o.email) };
+    const same = orderAddress(o.billing) === orderAddress(o.shipping);
+    const shipTo = same ? null : { name: o.customerName.trim(), address: orderAddress(o.shipping), stateCode: stateCodeFromName(o.shipping.state ?? '') };
+    return { billTo, shipTo, crmCompanyId: null, crmBranchId: null, shipToBranchId: null, profile: null };
+  }
   if (c.kind === 'one_off') {
     const stateCode = stateCodeFromName(c.state);
     const billTo: Party = { name: c.name.trim(), address: c.address.trim(), stateCode, gstin: text(c.gstin), phone: text(c.phone), email: text(c.email) };
@@ -121,11 +146,15 @@ async function planLines(lines: LineInput[], ctx: { mode: GstMode; date: string;
       const lp = await linePrice({ companyId: ctx.companyId, branchId: ctx.branchId, invProductId: p.id, date: ctx.date, qty: Math.max(1, Math.round(Number(qty.toString()))) });
       rate = new Decimal(lp.rate ?? '0'); priceSource = lp.source;
     } else throw new UserError(`Line ${i + 1}: enter a rate`);
-    const discountPct = text(l.discountPct) ? num(l.discountPct, `Line ${i + 1} discount %`) : zero();
+    let discountPct = text(l.discountPct) ? num(l.discountPct, `Line ${i + 1} discount %`) : zero();
     if (discountPct.greaterThan(100)) throw new UserError(`Line ${i + 1}: discount above 100%`);
+    const gross = r2(qty.times(rate));
+    const fixedDiscount = text(l.discount) ? num(l.discount, `Line ${i + 1} discount`) : null;
+    if (fixedDiscount?.greaterThan(gross)) throw new UserError(`Line ${i + 1}: the discount is more than the line`);
+    if (fixedDiscount) discountPct = gross.isZero() ? zero() : r2(fixedDiscount.times(100).dividedBy(gross));
     const gstRate = text(l.gstRate) ? num(l.gstRate, `Line ${i + 1} GST rate`) : SALES_GST_RATE;
     if (p && !p.gstRate.equals(gstRate)) warnings.push(`Line ${i + 1}: bloc-inv has GST ${p.gstRate.toFixed(2)}% for ${p.name}; ${gstRate.toFixed(2)}% is charged`);
-    const discount = r2(r2(qty.times(rate)).times(discountPct).dividedBy(100));
+    const discount = fixedDiscount ?? r2(gross.times(discountPct).dividedBy(100));
     const a = computeLine({ qty: qty.toString(), rate: rate.toString(), discount: discount.toString(), gstRate: gstRate.toString(), mode: ctx.mode });
     out.push({
       invProductId: p?.id ?? null, sku: p?.sku ?? null, description: text(l.description) ?? p?.name ?? '', hsnSac: text(l.hsnSac) ?? p?.hsn ?? null,
@@ -148,7 +177,7 @@ async function plan(input: DocInput) {
   if (supply.gstin) party.billTo.gstin = supply.gstin;
   const { lines, warnings } = await planLines(input.lines, { mode: supply.gstMode, date, companyId: party.crmCompanyId, branchId: party.crmBranchId });
   const totals = documentTotals(lines);
-  const termId = input.paymentTermId || party.profile?.paymentTermId || (await prisma.paymentTerm.findFirst({ where: { label: input.customer.kind === 'one_off' ? 'On receipt' : 'On delivery' } }))?.id || null;
+  const termId = input.paymentTermId || party.profile?.paymentTermId || (await prisma.paymentTerm.findFirst({ where: { label: party.crmCompanyId ? 'On delivery' : 'On receipt' } }))?.id || null;
   const term = termId ? await prisma.paymentTerm.findUnique({ where: { id: termId } }) : null;
   const t = await template();
   const eway = ewayBillNeeded({ docType: input.docType, total: totals.total, threshold: t.ewayBillThreshold, hasGoods: lines.some((l) => isGoodsCode(l.hsnSac)) });
@@ -219,12 +248,15 @@ function checkCustomerInput(input: DocInput) {
   if (!input.lines.length) throw new UserError('Add at least one line');
 }
 
-export async function createDoc(ctx: AuditContext, input: DocInput, extra: { proformaId?: string | null; crmOrderNumber?: string | null } = {}) {
+export type DocExtra = { proformaId?: string | null; crmOrderNumber?: string | null; source?: 'manual' | 'd2c_batch' | 'crm_api' | 'refill'; refillPlanId?: string | null };
+
+export async function createDoc(ctx: AuditContext, input: DocInput, extra: DocExtra = {}) {
   checkCustomerInput(input);
   const p = await plan(input);
   const company = await getCompany();
+  const crmOrderNumber = input.customer.kind === 'order' ? input.customer.orderNumber : extra.crmOrderNumber ?? null;
   const doc = await withAudit({ ...ctx, reason: ctx.reason ?? `${DOC_LABEL[input.docType]} drafted` }, async (tx) => {
-    const d = await tx.salesDocument.create({ data: { entityId: company.id, docType: input.docType, ...docData(input, p), proformaId: extra.proformaId ?? null, crmOrderNumber: extra.crmOrderNumber ?? null } });
+    const d = await tx.salesDocument.create({ data: { entityId: company.id, docType: input.docType, ...docData(input, p), proformaId: extra.proformaId ?? null, crmOrderNumber, source: extra.source ?? 'manual', refillPlanId: extra.refillPlanId ?? null } });
     await writeLines(tx, d.id, p.lines);
     return d;
   });
@@ -257,12 +289,13 @@ function inputOf(d: SalesDocument & { lines: SalesDocumentLine[] }): DocInput {
   const ship = d.shipTo as Party;
   return {
     docType: d.docType as 'proforma' | 'tax_invoice', docDate: dateText(d.docDate)!,
-    customer: d.customerKind === 'outlet'
+    customer: d.customerKind === 'order' && d.crmOrderNumber ? { kind: 'order', orderNumber: d.crmOrderNumber }
+      : d.customerKind === 'outlet'
       ? { kind: 'outlet', companyId: d.crmCompanyId!, branchId: d.crmBranchId!, shipToBranchId: d.shipToBranchId }
       : { kind: 'one_off', name: bill.name, address: bill.address, state: bill.stateCode ?? '', gstin: bill.gstin, phone: bill.phone, email: bill.email, shipTo: ship && ship.address !== bill.address ? { name: ship.name, address: ship.address, state: ship.stateCode ?? '' } : null },
     customerPoNo: d.customerPoNo, customerPoDate: dateText(d.customerPoDate), validUntil: dateText(d.validUntil), paymentTermId: d.paymentTermId,
     salesPerson: d.salesPerson, notes: d.notes, ewayBillNo: d.ewayBillNo, transporter: d.transporter, vehicleNo: d.vehicleNo,
-    lines: d.lines.map((l) => ({ invProductId: l.invProductId, description: l.description, hsnSac: l.hsnSac, qty: l.qty.toString(), unit: l.unit, rate: l.rate.toFixed(2), discountPct: l.discountPct.toString(), gstRate: l.gstRate.toString(), sourceLineId: l.sourceLineId, priceSource: l.priceSource })),
+    lines: d.lines.map((l) => ({ invProductId: l.invProductId, description: l.description, hsnSac: l.hsnSac, qty: l.qty.toString(), unit: l.unit, rate: l.rate.toFixed(2), discountPct: l.discountPct.toString(), gstRate: l.gstRate.toString(), sourceLineId: l.sourceLineId, priceSource: l.priceSource, discount: d.customerKind === 'order' ? l.discount.toFixed(2) : null })),
   };
 }
 
@@ -369,7 +402,7 @@ async function creditNoteProblems(cn: SalesDocument & { lines: SalesDocumentLine
 export type CreditNoteInput = { docDate: string; creditReason: string; notes?: string | null; lines: { sourceLineId: string; qty: string; rate?: string | null }[] };
 
 /** F097: a credit note draft against an issued invoice (returned quantity, or a lower rate). */
-export async function createCreditNote(ctx: AuditContext, invoiceId: string, input: CreditNoteInput) {
+export async function createCreditNote(ctx: AuditContext, invoiceId: string, input: CreditNoteInput, extra: { source?: 'manual' | 'rto' } = {}) {
   const inv = await loadDoc(invoiceId);
   if (inv.docType !== 'tax_invoice' || inv.status !== 'issued') throw new UserError('A credit note is raised against an issued tax invoice');
   if (!CREDIT_REASONS.includes(input.creditReason as (typeof CREDIT_REASONS)[number])) throw new UserError('Choose why the credit note is raised');
@@ -383,7 +416,8 @@ export async function createCreditNote(ctx: AuditContext, invoiceId: string, inp
     if (qty.greaterThan(src.qty)) throw new UserError(`${src.description}: more than the ${src.qty} invoiced`);
     const rate = text(w.rate) ? num(w.rate, 'Rate') : src.rate;
     if (rate.greaterThan(src.rate)) throw new UserError(`${src.description}: the credit rate cannot be above the invoiced rate`);
-    const discount = r2(r2(qty.times(rate)).times(src.discountPct).dividedBy(100));
+    // At the invoiced rate the credit takes the line's own discount, in proportion; at a lower rate, its discount %.
+    const discount = rate.equals(src.rate) ? (qty.equals(src.qty) ? src.discount : r2(src.discount.times(qty).dividedBy(src.qty))) : r2(r2(qty.times(rate)).times(src.discountPct).dividedBy(100));
     const a = computeLine({ qty: qty.toString(), rate: rate.toString(), discount: discount.toString(), gstRate: src.gstRate.toString(), mode: inv.gstMode as GstMode });
     lines.push({ invProductId: src.invProductId, sku: src.sku, description: src.description, hsnSac: src.hsnSac, qty, unit: src.unit, rate, discountPct: src.discountPct, discount, gstRate: src.gstRate, ...a, priceSource: `credit of ${inv.docNumber}`, sourceLineId: src.id });
   }
@@ -395,7 +429,7 @@ export async function createCreditNote(ctx: AuditContext, invoiceId: string, inp
       data: {
         entityId: company.id, docType: 'credit_note', docDate: parseDate(date), customerKind: inv.customerKind, crmCompanyId: inv.crmCompanyId, crmBranchId: inv.crmBranchId,
         shipToBranchId: inv.shipToBranchId, crmOrderNumber: inv.crmOrderNumber, billTo: inv.billTo as Prisma.InputJsonValue, shipTo: inv.shipTo as Prisma.InputJsonValue,
-        supplyType: inv.supplyType, placeOfSupply: inv.placeOfSupply, gstMode: inv.gstMode, againstInvoiceId: inv.id, creditReason: input.creditReason, notes: text(input.notes),
+        supplyType: inv.supplyType, placeOfSupply: inv.placeOfSupply, gstMode: inv.gstMode, againstInvoiceId: inv.id, creditReason: input.creditReason, notes: text(input.notes), source: extra.source ?? 'manual',
         salesPerson: inv.salesPerson, taxable: totals.taxable, cgst: totals.cgst, sgst: totals.sgst, igst: totals.igst, roundOff: totals.roundOff, total: totals.total,
       },
     });
@@ -548,7 +582,7 @@ function rowView(d: DocRow, conv?: string) {
     id: d.id, docType: d.docType, docTypeLabel: DOC_LABEL[d.docType], docNumber: d.docNumber, docDate: dateText(d.docDate), status: st, statusLabel: STATUS_LABEL[st] ?? st,
     customerName: bill.name, customerGstin: bill.gstin, supplyType: d.supplyType, placeOfSupply: d.placeOfSupply, crmCompanyId: d.crmCompanyId, crmOrderNumber: d.crmOrderNumber,
     taxable: moneyText(d.taxable), tax: moneyText(d.cgst.plus(d.sgst).plus(d.igst)), total: moneyText(d.total), dueDate: dateText(d.dueDate), validUntil: dateText(d.validUntil),
-    sent: !!d.sentAt, salesPerson: d.salesPerson,
+    sent: !!d.sentAt, salesPerson: d.salesPerson, source: d.source, sourceLabel: SOURCE_LABEL[d.source] ?? d.source, refillPlanId: d.refillPlanId,
   };
 }
 

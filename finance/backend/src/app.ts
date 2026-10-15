@@ -18,6 +18,8 @@ import claimRoutes from './routes/claim.routes';
 import reconRoutes from './routes/recon.routes';
 import customerRoutes from './routes/customer.routes';
 import salesRoutes from './routes/sales.routes';
+import d2cRoutes from './routes/d2c.routes';
+import crmIntegrationRoutes from './routes/crmIntegration.routes';
 import { DeleteRefusedError, refuseDelete } from './lib/audit';
 import { UserError } from './lib/http';
 
@@ -38,6 +40,8 @@ export function createApp() {
     // ============================
     app.get('/api/health', (_req, res) => { res.json({ success: true, data: { ok: true } }); });
     app.use('/api/auth', authRoutes);
+    // F105: the CRM calls with its own key, not a founder's login.
+    app.use('/api/integrations/crm/v1', crmIntegrationRoutes);
 
     // ============================
     // PROTECTED ROUTES
@@ -57,6 +61,7 @@ export function createApp() {
     app.use('/api/claims', claimRoutes);
     app.use('/api/recon', reconRoutes);
     app.use('/api', customerRoutes);
+    app.use('/api', d2cRoutes);
     app.use('/api', salesRoutes);
 
     // No hard deletes anywhere (BR-43, A9): every DELETE is refused and leaves an audit row.

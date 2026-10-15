@@ -16,7 +16,7 @@ const q = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
 const reasonBody = z.object({ reason: z.string().min(3, 'give a reason') });
 
 const line = z.object({
-    invProductId: opt, description: opt, hsnSac: opt, qty: z.string().min(1), unit: opt, rate: opt, discountPct: opt, gstRate: opt, sourceLineId: opt, priceSource: opt,
+    invProductId: opt, description: opt, hsnSac: opt, qty: z.string().min(1), unit: opt, rate: opt, discountPct: opt, gstRate: opt, sourceLineId: opt, priceSource: opt, discount: opt,
 });
 const customer = z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('outlet'), companyId: z.string().min(1), branchId: z.string().min(1), shipToBranchId: opt }),
@@ -24,6 +24,7 @@ const customer = z.discriminatedUnion('kind', [
         kind: z.literal('one_off'), name: z.string(), address: z.string(), state: z.string(), gstin: opt, phone: opt, email: opt,
         shipTo: z.object({ name: z.string(), address: z.string(), state: z.string() }).nullish(),
     }),
+    z.object({ kind: z.literal('order'), orderNumber: z.string().min(1) }),
 ]);
 const docSchema = z.object({
     docType: z.enum(['proforma', 'tax_invoice']), docDate: zDate, customer, customerPoNo: opt, customerPoDate: zDate.nullish().or(z.literal('')),

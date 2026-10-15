@@ -10,6 +10,7 @@ import { PeriodLockTab } from './PeriodLockTab';
 import { PurchasingTab } from './PurchasingTab';
 import { OrderToBankTab } from './OrderToBankTab';
 import { InvoicesTab } from './InvoicesTab';
+import { CrmApiTab } from './CrmApiTab';
 
 const TABS = [
   { key: 'company', label: 'Company & FY', body: CompanyTab },
@@ -19,6 +20,7 @@ const TABS = [
   { key: 'terms', label: 'Terms & approvals', body: TermsTab },
   { key: 'purchasing', label: 'Purchasing', body: PurchasingTab },
   { key: 'invoices', label: 'Invoices', body: InvoicesTab },
+  { key: 'crm-api', label: 'CRM API', body: CrmApiTab },
   { key: 'orders', label: 'Order-to-bank', body: OrderToBankTab },
   { key: 'locks', label: 'Period lock', body: PeriodLockTab },
 ] as const;

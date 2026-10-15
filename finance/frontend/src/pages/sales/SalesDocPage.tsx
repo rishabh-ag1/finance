@@ -138,6 +138,7 @@ export function SalesDocPage() {
           ...(d.ewayBillNo || d.transporter || d.vehicleNo ? [{ label: 'Transport', value: [d.ewayBillNo && `E-way bill ${d.ewayBillNo}`, d.transporter, d.vehicleNo].filter(Boolean).join(' · ') }] : []),
           ...(d.salesPerson ? [{ label: 'Sales person', value: d.salesPerson }] : []),
           ...(d.crmOrderNumber ? [{ label: 'CRM order', value: <Link to={`/order-to-bank/orders/${encodeURIComponent(d.crmOrderNumber)}`} className="text-blue-700 hover:underline">{d.crmOrderNumber}</Link> }] : []),
+          ...(d.source !== 'manual' ? [{ label: 'Made by', value: d.sourceLabel }] : []),
           ...(d.issuedAt ? [{ label: 'Issued', value: `${formatDateTime(d.issuedAt)} · template v${d.templateVersion} (${d.layout})` }] : []),
           ...(d.sentAt ? [{ label: 'Sent', value: formatDateTime(d.sentAt) }] : []),
           ...(d.acceptedAt ? [{ label: 'Accepted', value: formatDateTime(d.acceptedAt) }] : []),

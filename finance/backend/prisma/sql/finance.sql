@@ -700,6 +700,7 @@ alter table finance."SalesDocument" add constraint sales_doc_shape check (
   "total" >= 0 and "taxable" >= 0
   and "supplyType" in ('b2b', 'b2c') and "placeOfSupply" ~ '^[0-9]{2}$'
   and "customerKind" in ('outlet', 'one_off', 'order')
+  and "source" in ('manual', 'd2c_batch', 'crm_api', 'refill', 'rto')
   and (("status" = 'draft' or "status" = 'discarded') = ("docNumber" is null))
   and ("status" not in ('cancelled', 'discarded') or length(trim(coalesce("statusReason", ''))) > 0)
   and ("docType" <> 'credit_note' or "againstInvoiceId" is not null)
@@ -803,3 +804,42 @@ begin
                     for each statement execute function finance.no_hard_delete()', t.tablename);
   end loop;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Step 16: D2C batch, CRM invoice API, refill plans
+-- ---------------------------------------------------------------------------
+alter table finance."D2cOrderInvoice" drop constraint if exists d2c_order_state;
+alter table finance."D2cOrderInvoice" add constraint d2c_order_state check (
+  "state" in ('invoiced', 'fix') and ("state" <> 'invoiced' or "invoiceId" is not null)
+);
+
+alter table finance."RefillPlan" drop constraint if exists refill_plan_shape;
+alter table finance."RefillPlan" add constraint refill_plan_shape check (
+  "qty" > 0 and ("rate" is null or "rate" > 0) and "everyMonths" between 1 and 12
+);
+
+-- F105: the call log is a record of what the CRM did; it is never edited.
+create or replace function finance.crm_api_call_fixed() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'finance: the CRM API call log cannot be changed' using errcode = 'P0016';
+end $$;
+drop trigger if exists crm_api_call_fixed on finance."CrmApiCall";
+create trigger crm_api_call_fixed before update on finance."CrmApiCall"
+  for each row execute function finance.crm_api_call_fixed();
+
+-- A key's hash never changes; a key is revoked, never re-used.
+create or replace function finance.crm_api_key_fixed() returns trigger
+language plpgsql as $$
+begin
+  if new."keyHash" is distinct from old."keyHash" or new."actsAsUserId" is distinct from old."actsAsUserId" then
+    raise exception 'finance: an API key cannot be changed; revoke it and make a new one' using errcode = 'P0016';
+  end if;
+  if old."revokedAt" is not null and new."revokedAt" is distinct from old."revokedAt" then
+    raise exception 'finance: a revoked API key stays revoked' using errcode = 'P0016';
+  end if;
+  return new;
+end $$;
+drop trigger if exists crm_api_key_fixed on finance."CrmApiKey";
+create trigger crm_api_key_fixed before update on finance."CrmApiKey"
+  for each row execute function finance.crm_api_key_fixed();
