@@ -14,6 +14,7 @@ import { autoCategorise, pairTransfers } from './ledger.service';
 import { matchPaymentsForTxns } from '../services/payment.service';
 import { matchReimbursementsForTxns } from '../services/claim.service';
 import { matchOrderCreditsForTxns } from '../services/reconMatch.service';
+import { matchReceiptsForTxns, settleOrderInvoices } from '../services/receivables.service';
 import { listAttachments, upload } from '../services/attachment.service';
 
 /**
@@ -235,6 +236,8 @@ export async function confirmImport(ctx: AuditContext, input: ImportFile) {
         await matchReimbursementsForTxns(tx, newIds);
         // M18: Razorpay settlements, COD remittances and direct order payments (F194, F195).
         await matchOrderCreditsForTxns(tx, newIds);
+        // M10: credits that are recorded customer receipts (BR-38).
+        await matchReceiptsForTxns(tx, newIds);
         await autoCategorise(tx, newIds);
       }
       return b;
@@ -246,6 +249,8 @@ export async function confirmImport(ctx: AuditContext, input: ImportFile) {
     } catch (error) {
       console.error('Statement file not stored:', error);
     }
+    // BR-39 / BR-40: settlements and order payments now in the bank settle their orders' invoices.
+    try { await settleOrderInvoices({ userId: ctx.userId, reason: 'Order payments in the bank applied to invoices' }); } catch (error) { console.error('Order invoices not settled:', error); }
     return batchView(batch);
   } catch (error) {
     if (pgCode(error) === 'P0007') throw new UserError('A row falls in a locked month. Unlock it in Settings > Period lock first (BR-36).');

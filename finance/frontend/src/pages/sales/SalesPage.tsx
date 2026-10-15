@@ -67,7 +67,7 @@ export function SalesPage() {
                 </div>
                 <div className="text-right shrink-0">
                   <div className="num font-medium">{d.docType === 'credit_note' ? '−' : ''}{formatINR(d.total)}</div>
-                  <Chip tone={STATUS_TONE[d.status] ?? 'gray'}>{d.statusLabel}</Chip>
+                  {d.payment ? <Chip tone={d.payment.overdue ? 'red' : d.payment.state === 'paid' ? 'green' : d.payment.state === 'partly_paid' ? 'blue' : 'amber'}>{d.payment.overdue ? `Overdue ${d.payment.daysOverdue}d` : d.payment.stateLabel}</Chip> : <Chip tone={STATUS_TONE[d.status] ?? 'gray'}>{d.statusLabel}</Chip>}
                 </div>
               </div>
             </Link>

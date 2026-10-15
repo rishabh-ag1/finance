@@ -4,7 +4,7 @@ import { prisma } from '../config/database';
 import { crmBranchCompanyId, crmCompany, crmOrder, type OrderAddress } from '../crm/reader';
 import { invProducts } from '../inventory/reader';
 import { withAudit, type AuditContext, type Tx } from '../lib/audit';
-import { resolveProfile } from '../lib/customers';
+import { creditWarnings, resolveProfile } from '../lib/customers';
 import { dateText, parseDate } from '../lib/dates';
 import { fyLabel, todayIST } from '../lib/fy';
 import { amountInWords, computeLine, documentTotals, type GstMode } from '../lib/gst';
@@ -16,6 +16,7 @@ import { salesDocumentHtml, SALES_LAYOUT_VERSION, type SalesPdfData } from '../p
 import { renderPdf } from '../pdf/render';
 import { archive, download, upload } from './attachment.service';
 import { linePrice, SALES_GST_RATE } from './customer.service';
+import { applyProformaAdvances, customerExposure, paymentViews, settleOrderInvoices } from './receivables.service';
 import { takeNumber } from './numbering.service';
 import { getCompany } from './settings.service';
 
@@ -182,6 +183,11 @@ async function plan(input: DocInput) {
   const t = await template();
   const eway = ewayBillNeeded({ docType: input.docType, total: totals.total, threshold: t.ewayBillThreshold, hasGoods: lines.some((l) => isGoodsCode(l.hsnSac)) });
   if (eway && !text(input.ewayBillNo)) warnings.push(`Goods above ₹${t.ewayBillThreshold.toFixed(0)}: an e-way bill is needed before dispatch (make it on the e-way bill portal and add its number) [Verify threshold, BR-42]`);
+  // F083 (warn only): over the credit limit, or something more than 30 days overdue.
+  if (party.crmCompanyId && input.docType === 'tax_invoice') {
+    const ex = await customerExposure(party.crmCompanyId);
+    warnings.push(...creditWarnings({ creditLimit: party.profile?.creditLimit ?? null, outstanding: ex.outstanding, newAmount: totals.total, oldestOverdueDays: ex.oldestOverdueDays }));
+  }
   if (party.profile && party.billTo.gstin === null && input.customer.kind === 'outlet') warnings.push('This outlet has no GSTIN in the CRM, so the invoice is B2C; if the customer is registered, ask sales to add the GSTIN first (BR-49)');
   const problems = issueProblems({
     docType: input.docType, supplyType: supply.supplyType, billTo: party.billTo, gstinProblem: supply.problem, placeOfSupply: supply.placeOfSupply,
@@ -335,6 +341,11 @@ export async function issueDoc(ctx: AuditContext, id: string) {
   });
   // The frozen PDF is filed after the issue commits; if printing fails the document stands and can be printed again.
   try { await printDoc(ctx, id); } catch (e) { console.error('Invoice PDF not stored:', e); }
+  // BR-33: advances held on the proforma move to this invoice; an order already paid settles it (BR-39).
+  if (d.docType === 'tax_invoice') {
+    await applyProformaAdvances(ctx, id);
+    if (d.crmOrderNumber) await settleOrderInvoices({ userId: ctx.userId, reason: 'Order payment applied to its invoice' });
+  }
   return getDoc(id);
 }
 
@@ -602,9 +613,11 @@ export async function listDocs(f: { docType?: string; status?: string; q?: strin
     conv.set(pi.id, conversionState(lines.map((l) => ({ id: l.id, qty: l.qty })), await convertedLines(pi.id)).state);
   }
   const q = f.q?.trim().toLowerCase();
-  const out = rows.map((r) => rowView(r, conv.get(r.id)))
+  const pay = await paymentViews(rows.filter((r) => r.docType === 'tax_invoice' && r.status === 'issued'));
+  const out = rows.map((r) => ({ ...rowView(r, conv.get(r.id)), payment: pay.get(r.id) ?? null }))
     .filter((r) => (!q ? true : `${r.docNumber ?? ''} ${r.customerName} ${r.customerGstin ?? ''} ${r.crmOrderNumber ?? ''}`.toLowerCase().includes(q)))
-    .filter((r) => (f.status && !['draft', 'issued', 'cancelled', 'discarded'].includes(f.status) ? r.status === f.status : true));
+    .filter((r) => (!f.status || ['draft', 'issued', 'cancelled', 'discarded'].includes(f.status) ? true
+      : f.status === 'overdue' ? !!r.payment?.overdue : ['unpaid', 'partly_paid', 'paid'].includes(f.status) ? r.payment?.state === f.status : r.status === f.status));
   const counted = out.filter((r) => r.status !== 'draft' && r.status !== 'cancelled');
   const sum = (k: 'taxable' | 'tax' | 'total', type: string) => moneyText(counted.filter((r) => r.docType === type).reduce((s, r) => s.plus(r[k] ?? 0), zero()));
   return {

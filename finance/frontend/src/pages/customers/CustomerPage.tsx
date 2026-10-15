@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../api';
+import { CustomerMoney } from './CustomerMoney';
 import { Button, Card, Chip, ErrorNote, Facts, Field, Modal, MoneyInput, PageHeader, Select, TextInput } from '../../components/ui/kit';
 import { useAuth } from '../../context/auth';
 import { formatINR } from '../../lib/money';
@@ -118,6 +119,7 @@ export function CustomerPage() {
         ]} />
       </Card>
 
+      <CustomerMoney companyId={c.id} />
       <Card className="p-4 sm:p-6 space-y-2">
         <h2 className="font-semibold text-gray-900">Outlets</h2>
         <ul className="divide-y divide-gray-100 text-sm">

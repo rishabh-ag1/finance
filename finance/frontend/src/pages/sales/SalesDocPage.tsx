@@ -11,6 +11,7 @@ import { stateLabel } from '../../lib/gstStates';
 import { formatINR } from '../../lib/money';
 import { apiErrorMessage } from '../../lib/utils';
 import { dateLabel } from '../settings/api';
+import { PaymentCard } from './PaymentCard';
 import { CREDIT_REASONS, SALES_KEYS, STATUS_TONE, pdfPreviewUrl, useSalesDoc, type SalesDoc } from './api';
 
 const today = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
@@ -145,6 +146,8 @@ export function SalesDocPage() {
           ...(d.notes ? [{ label: 'Notes', value: d.notes }] : []),
         ]} />
       </Card>
+
+      {d.status === 'issued' && d.docType !== 'credit_note' && <PaymentCard d={d} />}
 
       {d.related.length > 0 && (
         <Card className="p-4 sm:p-6 space-y-2">

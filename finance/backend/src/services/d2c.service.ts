@@ -8,6 +8,7 @@ import { todayIST } from '../lib/fy';
 import { UserError } from '../lib/http';
 import { Decimal } from '../lib/money';
 import { createCreditNote, createDoc, getDoc, issueDoc, previewDoc, type DocExtra, type DocInput, type LineInput } from './sales.service';
+import { settleOrderInvoices } from './receivables.service';
 import { getCompany } from './settings.service';
 
 /**
@@ -179,6 +180,7 @@ export async function runD2cBatch(ctx: AuditContext | null, opts: { orderNumbers
     if (opts.orderNumbers) orders = orders.filter((o) => opts.orderNumbers!.includes(o.orderNumber));
     const inv = new Map((await deliveries({ orderNumbers: orders.map((o) => o.orderNumber) })).map((d) => [d.orderNumber, d.shippedAt]));
     for (const o of orders) await handleOrder(actor, o, inv.get(o.orderNumber) ?? null, startFrom, sum);
+    if (sum.invoiced) await settleOrderInvoices({ userId: actor.userId, reason: 'Order payments applied to new D2C invoices' });
     if (!opts.orderNumbers && s.id) {
       await withAudit({ ...actor, reason: 'D2C batch run' }, (tx) => tx.d2cInvoiceSetting.update({ where: { id: s.id! }, data: { lastRunAt: new Date(), lastRunSummary: sum } }));
     }

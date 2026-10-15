@@ -194,7 +194,7 @@
 - **Module:** M06/M10
 - **Trigger:** Report run
 - **Logic:** Buckets by days past due date: Not due, 1-30, 31-60, 61-90, 90+. Unapplied advances shown as a separate column.
-- **Worked example:** 1 day past due goes in 1-30, 31 days in 31-60, 91 days in 90+; an advance on a PO that no invoice has used yet shows in the Advances column.
+- **Worked example:** 1 day past due goes in 1-30, 31 days in 31-60, 91 days in 90+; an advance on a PO that no invoice has used yet shows in the Advances column. Receivables (Step 17): a customer's receipt held on a proforma or not yet set against a tax invoice shows in its Advances column.
 - **Confidence:** High
 
 ## BR-25 - MSME payment alert
@@ -265,8 +265,8 @@
 
 - **Module:** M09
 - **Trigger:** Convert
-- **Logic:** Lines copied; PI marked Converted (fully or partly by quantity); advance receipts on the PI applied to the new invoice. For goods, advance received is not taxed at receipt; tax arises on the invoice. As built (Step 15): conversion by quantity per line, never more than is left; lines keep the proforma's rate. Advances are applied when receipts are built (Step 17).
-- **Worked example:** Proforma for 10 Trap Pro: an invoice for 6 leaves 4 (Partly converted); asking for 5 more is refused ('only 4 left'); the last 4 make it Converted.
+- **Logic:** Lines copied; PI marked Converted (fully or partly by quantity); advance receipts on the PI applied to the new invoice. For goods, advance received is not taxed at receipt; tax arises on the invoice. As built (Step 15): conversion by quantity per line, never more than is left; lines keep the proforma's rate. As built (Step 17): an advance is a receipt set against the proforma; when a tax invoice made from it is issued, the advance moves onto the invoice up to what it owes (the allocation on the proforma is removed with the reason and a new one made on the invoice); the rest stays on the proforma.
+- **Worked example:** Proforma for 10 Trap Pro: an invoice for 6 leaves 4 (Partly converted); asking for 5 more is refused ('only 4 left'); the last 4 make it Converted. Advance ₹30,000 on the proforma; the invoice for 6 (₹27,612) is issued: ₹27,612 moves to it (Paid), ₹2,388 stays on the proforma.
 - **Confidence:** Likely. [Verify] treatment of advances for goods with CA.
 
 ## BR-34 - Cancellation and credit notes
@@ -305,7 +305,7 @@
 
 - **Module:** M10
 - **Trigger:** Bank credit imported
-- **Logic:** Suggest invoices whose outstanding equals the credit amount (or credit + plausible TDS at 1%/2%/10%), customer name fuzzy-matches the narration, within 60 days of due date. Show top 3 with confidence. If credit is less than outstanding by exactly a TDS rate, suggest 'record TDS deducted by customer'.
+- **Logic:** Suggest invoices whose outstanding equals the credit amount (or credit + plausible TDS at 1%/2%/10%), customer name fuzzy-matches the narration, within 60 days of due date. Show top 3 with confidence. If credit is less than outstanding by exactly a TDS rate, suggest 'record TDS deducted by customer'. As built (Step 17): TDS fits only for customers set to deduct TDS, on the invoice's taxable value; a smaller credit from a customer whose name is in the narration is offered as a part payment (low confidence). Confidence: exact amount 0.6, amount less TDS 0.55, part payment 0.2, plus up to 0.4 for the name. The other way round, a recorded receipt finds its credit on statement import (UTR, else same amount within 3 days with the name, as BR-08).
 - **Worked example:** Invoice ₹1,18,000 (taxable ₹1,00,000 + GST ₹18,000). Hotel deducts 2% on taxable = ₹2,000 and pays ₹1,16,000. App suggests: receipt ₹1,16,000 + TDS receivable ₹2,000, invoice fully settled.
 - **Confidence:** High
 
@@ -313,7 +313,7 @@
 
 - **Module:** M10
 - **Trigger:** Settlement imported
-- **Logic:** Settlement amount (bank credit) = sum of captured payments - refunds - fees - GST on fees (- adjustments). Creates: gross receipts per order/invoice, fee expense (Bank Charges / Payment Gateway), GST on fees (input credit). One bank row matched to one settlement batch. As built (Step 13): settlements are imported, tied out (BR-47) and matched to one bank credit, which is categorised Revenue / Razorpay at its net. Fees and GST on fees are shown per settlement; booking them as expense and input credit comes with receivables (M10, Phase 3).
+- **Logic:** Settlement amount (bank credit) = sum of captured payments - refunds - fees - GST on fees (- adjustments). Creates: gross receipts per order/invoice, fee expense (Bank Charges / Payment Gateway), GST on fees (input credit). One bank row matched to one settlement batch. As built (Step 13): settlements are imported, tied out (BR-47) and matched to one bank credit, which is categorised Revenue / Razorpay at its net. Fees and GST on fees are shown per settlement. As built (Step 17): when the settlement is matched to its bank credit, each payment line settles its order's tax invoice with a receipt: amount = line net, gateway charges = fee + GST on fee (GST kept apart as input credit), so received + charges = what the customer paid. Fees and GST on fees are totalled per month in Receivables (for the CA pack, Step 19). The bank credit stays linked to the settlement batch; the receipts carry no bank row, so the money is counted once.
 - **Worked example:** -
 - **Confidence:** High
 
@@ -321,7 +321,7 @@
 
 - **Module:** M10
 - **Trigger:** Remittance imported
-- **Logic:** Remittance amount = sum of COD collected for listed AWBs - any freight/charges deducted (if that setting is on). Each AWB maps to a CRM order and its invoice.
+- **Logic:** Remittance amount = sum of COD collected for listed AWBs - any freight/charges deducted (if that setting is on). Each AWB maps to a CRM order and its invoice. As built (Step 17): once the remittance is matched to its bank credit, each AWB line settles its order's tax invoice with a receipt (mode COD remittance).
 - **Worked example:** -
 - **Confidence:** Likely. Confirm your Shiprocket remittance settings (Q13).
 
@@ -329,8 +329,8 @@
 
 - **Module:** M10/M07
 - **Trigger:** Receipt with TDS
-- **Logic:** Receipt + TDS deducted = amount allocated to the invoice. TDS receivable tracked per customer per quarter and matched to Form 26AS/AIS later.
-- **Worked example:** -
+- **Logic:** Receipt + TDS deducted = amount allocated to the invoice. TDS receivable tracked per customer per quarter and matched to Form 26AS/AIS later. As built (Step 17): TDS is entered per invoice on the receipt; refused unless the customer's Finance profile says it deducts TDS (with its section). Receivables > Customer TDS lists it by customer and quarter.
+- **Worked example:** Invoice ₹1,18,000 (taxable ₹1,00,000); the hotel deducts 2% (₹2,000) and pays ₹1,16,000: receipt ₹1,16,000 with TDS ₹2,000 allocates ₹1,18,000 and the invoice is Paid; Customer TDS shows ₹2,000 for the quarter.
 - **Confidence:** High. Rare for Entelechy customers; switched off per customer by default.
 
 ## BR-42 - E-way bill field

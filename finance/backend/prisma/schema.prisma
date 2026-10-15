@@ -2094,3 +2094,88 @@ model RefillPlan {
   @@index([crmCompanyId])
   @@schema("finance")
 }
+
+// ============================================================================
+// M10 Receivables (Phase 3, Step 17)
+// ============================================================================
+
+/// A receipt from a customer (payment_in). amount = what reached the bank; tds = deducted by the
+/// customer (BR-41); bankCharges = gateway fee + GST on it (BR-39). What is not allocated is an advance.
+model Receipt {
+  id               String    @id @default(cuid())
+  entityId         String
+  receiptNo        String    @unique
+  receiptDate      DateTime  @db.Date
+  /// The CRM company paying; null for D2C buyers and one-off customers (customerName only).
+  crmCompanyId     String?
+  customerName     String
+  /// neft, rtgs, imps, upi, cheque, cash, razorpay, cod, other
+  mode             String
+  toBankAccountId  String?
+  reference        String?
+  amount           Decimal   @db.Decimal(14, 2)
+  tds              Decimal   @default(0) @db.Decimal(14, 2)
+  tdsSectionId     String?
+  bankCharges      Decimal   @default(0) @db.Decimal(14, 2)
+  gstOnCharges     Decimal   @default(0) @db.Decimal(14, 2)
+  /// manual, settlement (Razorpay / COD line, BR-39 / BR-40) or order_bank (direct order payment, F195)
+  source           String    @default("manual")
+  settlementLineId String?   @unique
+  orderBankLinkId  String?   @unique
+  crmOrderNumber   String?
+  bankTxnId        String?
+  matchedBy        String?
+  /// recorded or cancelled
+  status           String    @default("recorded")
+  statusReason     String?
+  notes            String?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+  updatedBy        String?
+  allocations      ReceiptAllocation[]
+
+  @@index([crmCompanyId])
+  @@index([receiptDate])
+  @@index([bankTxnId])
+  @@schema("finance")
+}
+
+/// Part of a receipt settling a tax invoice, or held against a proforma as an advance (BR-33).
+/// amount includes the TDS share (BR-41: receipt + TDS = amount allocated).
+model ReceiptAllocation {
+  id             String   @id @default(cuid())
+  receiptId      String
+  docId          String
+  amount         Decimal  @db.Decimal(14, 2)
+  tds            Decimal  @default(0) @db.Decimal(14, 2)
+  /// Proforma advance moved onto the invoice made from it (BR-33): the allocation it came from.
+  movedFromId    String?
+  isArchived     Boolean  @default(false)
+  archivedReason String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  createdBy      String?
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy      String?
+  receipt        Receipt  @relation(fields: [receiptId], references: [id])
+
+  @@index([docId])
+  @@index([receiptId])
+  @@schema("finance")
+}
+
+/// F116: a payment reminder shared by hand (WhatsApp, e-mail, call) until a mail account exists.
+model ReceivableReminder {
+  id        String   @id @default(cuid())
+  docId     String
+  sharedOn  DateTime @db.Date
+  channel   String
+  note      String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  createdBy String?
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy String?
+
+  @@index([docId])
+  @@schema("finance")
+}

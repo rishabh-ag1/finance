@@ -40,6 +40,9 @@ import { SalesFormPage } from './pages/sales/SalesFormPage';
 import { SalesDocPage } from './pages/sales/SalesDocPage';
 import { D2cPage } from './pages/sales/D2cPage';
 import { RefillsPage } from './pages/sales/RefillsPage';
+import { ReceivablesPage } from './pages/receivables/ReceivablesPage';
+import { ReceiptFormPage } from './pages/receivables/ReceiptFormPage';
+import { ReceiptPage } from './pages/receivables/ReceiptPage';
 import { CustomerPage } from './pages/customers/CustomerPage';
 import { ProductsPage } from './pages/customers/ProductsPage';
 import { PriceListPage } from './pages/customers/PriceListPage';
@@ -88,6 +91,11 @@ function App() {
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeTds" requiredAction="view" />}>
                   <Route path="/tds" element={<TdsPage />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeReceivables" requiredAction="view" />}>
+                  <Route path="/receivables" element={<ReceivablesPage />} />
+                  <Route path="/receipts/new" element={<ReceiptFormPage />} />
+                  <Route path="/receipts/:id" element={<ReceiptPage />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeSales" requiredAction="view" />}>
                   <Route path="/sales" element={<SalesPage />} />

@@ -843,3 +843,53 @@ end $$;
 drop trigger if exists crm_api_key_fixed on finance."CrmApiKey";
 create trigger crm_api_key_fixed before update on finance."CrmApiKey"
   for each row execute function finance.crm_api_key_fixed();
+
+-- ---------------------------------------------------------------------------
+-- Step 17: receipts (M10)
+-- ---------------------------------------------------------------------------
+alter table finance."Receipt" drop constraint if exists receipt_shape;
+alter table finance."Receipt" add constraint receipt_shape check (
+  "amount" >= 0 and "tds" >= 0 and "bankCharges" >= 0 and "gstOnCharges" >= 0 and "gstOnCharges" <= "bankCharges"
+  and "amount" + "tds" + "bankCharges" > 0
+  and "mode" in ('neft', 'rtgs', 'imps', 'upi', 'cheque', 'cash', 'razorpay', 'cod', 'other')
+  and "source" in ('manual', 'settlement', 'order_bank')
+  and "status" in ('recorded', 'cancelled')
+  and ("status" <> 'cancelled' or length(trim(coalesce("statusReason", ''))) > 0)
+  and length(trim("customerName")) > 0
+);
+
+alter table finance."ReceiptAllocation" drop constraint if exists receipt_allocation_shape;
+alter table finance."ReceiptAllocation" add constraint receipt_allocation_shape check (
+  "amount" > 0 and "tds" >= 0 and "tds" <= "amount"
+  and ("isArchived" = false or length(trim(coalesce("archivedReason", ''))) > 0)
+);
+
+-- A receipt's money never changes; a wrong receipt is cancelled with a reason and recorded again.
+create or replace function finance.receipt_fixed() returns trigger
+language plpgsql as $$
+begin
+  if old."status" = 'cancelled' then
+    raise exception 'finance: receipt % is cancelled; that cannot be undone', old."receiptNo" using errcode = 'P0017';
+  end if;
+  if (new."amount", new."tds", new."bankCharges", new."gstOnCharges", new."receiptDate", new."receiptNo", coalesce(new."crmCompanyId", ''), new."customerName")
+     is distinct from (old."amount", old."tds", old."bankCharges", old."gstOnCharges", old."receiptDate", old."receiptNo", coalesce(old."crmCompanyId", ''), old."customerName") then
+    raise exception 'finance: receipt % cannot be changed; cancel it and record it again', old."receiptNo" using errcode = 'P0017';
+  end if;
+  return new;
+end $$;
+drop trigger if exists receipt_fixed on finance."Receipt";
+create trigger receipt_fixed before update on finance."Receipt"
+  for each row execute function finance.receipt_fixed();
+
+-- Allocations are added or archived (with a reason), never edited.
+create or replace function finance.receipt_allocation_fixed() returns trigger
+language plpgsql as $$
+begin
+  if old."isArchived" or (new."amount", new."tds", new."docId", new."receiptId") is distinct from (old."amount", old."tds", old."docId", old."receiptId") then
+    raise exception 'finance: an allocation cannot be changed; remove it and allocate again' using errcode = 'P0017';
+  end if;
+  return new;
+end $$;
+drop trigger if exists receipt_allocation_fixed on finance."ReceiptAllocation";
+create trigger receipt_allocation_fixed before update on finance."ReceiptAllocation"
+  for each row execute function finance.receipt_allocation_fixed();

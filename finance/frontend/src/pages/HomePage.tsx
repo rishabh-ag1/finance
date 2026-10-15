@@ -25,6 +25,7 @@ type Home = {
   payables: { overdue: string; dueThisWeek: string; msmeAtRisk: number };
   founders: { founderUserId: string; founderName: string; owed: string; waiting: string }[];
   orderToBank: { inTransit: string | null; overdue: number; openDiscrepancies: number } | null;
+  receivables: { outstanding: string; overdue: string; open: number } | null;
   actions: { claimsToApprove: number; review: number; uncategorisedLastThree: number; staleStatements: { id: string; name: string; lastImportedAt: string | null }[]; missingDocuments: number; pendingBankApprovals: number; tdsToDeposit: { month: string; amount: string; dueDate: string; overdue: boolean }[] };
 };
 
@@ -95,6 +96,7 @@ export function HomePage() {
             <Kpi key={f.founderUserId} label={`Owed to ${f.founderName}`} value={short(f.owed)} hint={f.waiting !== '0.00' ? `${short(f.waiting)} waiting for approval` : 'Approved claims not yet paid back'} to="/claims" />
           ))}
           {h.founders.length === 0 && <Kpi label="Cash forecast" value="13 weeks" hint="What is due each week" to="/forecast" />}
+          {h.receivables && hasPermission('financeReceivables', 'view') && <Kpi label="Customers owe" value={short(h.receivables.outstanding)} tone={h.receivables.overdue !== '0.00' ? 'bad' : undefined} hint={h.receivables.overdue !== '0.00' ? `${short(h.receivables.overdue)} overdue` : `${h.receivables.open} open invoice(s)`} to="/receivables?tab=outstanding" />}
           {h.orderToBank && hasPermission('financeOrders', 'view') && <Kpi label="Money in transit" value={short(h.orderToBank.inTransit ?? '0')} hint="Paid by customers, not yet in the bank" tone={h.orderToBank.overdue ? 'bad' : undefined} to="/order-to-bank" />}
         </div>
       )}

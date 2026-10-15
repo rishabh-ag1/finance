@@ -14,6 +14,7 @@ import { parseRazorpayTable, parseShiprocketTable, type SettlementIn } from '../
 import { IN_TRANSIT, ORDER_STATUS_LABEL, ROUTE_LABEL, orderPaymentStatus, type Collections, type OrderFacts, type OrderStatusCode, type Route } from '../recon/status';
 import { tieOut } from '../recon/tieOut';
 import { upload } from './attachment.service';
+import { settleOrderInvoices } from './receivables.service';
 import {
   batchCandidates, linkBatchRow, linkLinesToOrders, linkOrderRow, linkPaymentsToOrders, matchBatches, reconRules, reconSetting, routeOf, unlinkBankRow, type Rules,
 } from './reconMatch.service';
@@ -459,6 +460,8 @@ export async function refreshDiscrepancies(ctx: AuditContext) {
       cleared += 1;
     }
   }, { timeoutMs: 120_000 });
+  // BR-39 / BR-40: orders whose money reached the bank settle their D2C invoices.
+  await settleOrderInvoices({ userId: ctx.userId, reason: 'Order payments in the bank applied to invoices' });
   return { opened, cleared, open: await prisma.reconDiscrepancy.count({ where: { status: 'open' } }) };
 }
 

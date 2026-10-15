@@ -12,6 +12,7 @@ import { balances as founderBalances } from './claim.service';
 import { apAgeing, dueList } from './payment.service';
 import { chaseList } from './bill.service';
 import { moneyInTransit, openDiscrepancyCount } from './recon.service';
+import { expectedInvoiceReceipts, outstandingList } from './receivables.service';
 import { forecastWeeks, weekIndex } from '../lib/forecast';
 import { daysOverdue, msmeAlert } from '../lib/payables';
 
@@ -180,6 +181,15 @@ export async function home(opts: { asOf?: string; accountIds?: string[] } = {}) 
     console.error('Order-to-bank figures left out of Home:', error);
   }
 
+  // D08: what customers owe on issued invoices, and how much of it is overdue (BR-22).
+  let receivables: { outstanding: string; overdue: string; open: number } | null = null;
+  try {
+    const o = await outstandingList();
+    receivables = { outstanding: o.totals.outstanding, overdue: o.totals.overdue, open: o.rows.length };
+  } catch (error) {
+    console.error('Receivables left out of Home:', error);
+  }
+
   return {
     asOf,
     fy: fy.label,
@@ -196,6 +206,7 @@ export async function home(opts: { asOf?: string; accountIds?: string[] } = {}) 
     payables: { overdue: due.totals.overdue, dueThisWeek: due.totals.thisWeek, msmeAtRisk: due.totals.msmeAtRisk },
     founders,
     orderToBank,
+    receivables,
     actions: {
       claimsToApprove,
       review,
@@ -379,6 +390,8 @@ export async function forecast(opts: { asOf?: string } = {}) {
   } catch (error) {
     console.error('Order-to-bank figures left out of the forecast:', error);
   }
+  // Invoices not tied to a CRM order (those are counted above as money in transit), by due date.
+  for (const x of await expectedInvoiceReceipts()) add(x.date, { kind: 'receipt', label: x.label, amount: new Decimal(x.amount), link: `/sales/${x.docId}` });
 
   // Regular spending without a bill: weekly average over the last 3 complete months (13 weeks).
   const lastThree = lastCompleteMonths(today);
@@ -418,7 +431,6 @@ export async function forecast(opts: { asOf?: string } = {}) {
     firstShortWeek: firstShort ? firstShort.from : null,
     notIncluded: {
       openPurchaseOrders: { count: openPos.length, unbilled: moneyText(poUnbilled) },
-      receipts: 'Receipts against invoices (HoReCa, B2B) come with invoicing (Phase 3)',
       loans: 'Loan EMIs come with the loans module (Phase 3)',
     },
   };
