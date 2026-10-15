@@ -20,6 +20,7 @@ import customerRoutes from './routes/customer.routes';
 import salesRoutes from './routes/sales.routes';
 import d2cRoutes from './routes/d2c.routes';
 import receivablesRoutes from './routes/receivables.routes';
+import fundingRoutes from './routes/funding.routes';
 import crmIntegrationRoutes from './routes/crmIntegration.routes';
 import { DeleteRefusedError, refuseDelete } from './lib/audit';
 import { UserError } from './lib/http';
@@ -64,6 +65,7 @@ export function createApp() {
     app.use('/api', customerRoutes);
     app.use('/api', d2cRoutes);
     app.use('/api', receivablesRoutes);
+    app.use('/api', fundingRoutes);
     app.use('/api', salesRoutes);
 
     // No hard deletes anywhere (BR-43, A9): every DELETE is refused and leaves an audit row.

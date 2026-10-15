@@ -136,6 +136,20 @@ export async function recordContext(recordType: string, recordId: string): Promi
       const record = d.docNumber ?? `Draft ${d.id.slice(-6)}`;
       return { fy: d.fyLabel ?? fyLabel(day), module: 'Sales documents', record, nameBase: `${record}_${who}` };
     }
+    case 'Loan': {
+      const l = await prisma.loan.findUnique({ where: { id: recordId } });
+      if (!l) throw new UserError('Loan not found', 404);
+      const day = dateText(l.disbursedDate)!;
+      const record = `${l.lender} ${day}`;
+      return { fy: fyLabel(day), module: 'Loans', record, nameBase: `Loan_${l.lender}_${day}` };
+    }
+    case 'CapitalReceipt': {
+      const c = await prisma.capitalReceipt.findUnique({ where: { id: recordId } });
+      if (!c) throw new UserError('Capital receipt not found', 404);
+      const day = dateText(c.receiptDate)!;
+      const record = `${c.holderName} ${day}`;
+      return { fy: fyLabel(day), module: 'Capital', record, nameBase: `Capital_${c.holderName}_${day}` };
+    }
     case 'InvoiceTemplate': {
       return { fy: fyLabel(todayIST()), module: 'Settings', record: 'Invoice template', nameBase: 'Invoice-template' };
     }

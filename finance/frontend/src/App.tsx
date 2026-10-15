@@ -43,6 +43,9 @@ import { RefillsPage } from './pages/sales/RefillsPage';
 import { ReceivablesPage } from './pages/receivables/ReceivablesPage';
 import { ReceiptFormPage } from './pages/receivables/ReceiptFormPage';
 import { ReceiptPage } from './pages/receivables/ReceiptPage';
+import { FundingPage } from './pages/funding/FundingPage';
+import { LoanFormPage } from './pages/funding/LoanFormPage';
+import { LoanPage } from './pages/funding/LoanPage';
 import { CustomerPage } from './pages/customers/CustomerPage';
 import { ProductsPage } from './pages/customers/ProductsPage';
 import { PriceListPage } from './pages/customers/PriceListPage';
@@ -91,6 +94,11 @@ function App() {
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeTds" requiredAction="view" />}>
                   <Route path="/tds" element={<TdsPage />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredModule="financeFunding" requiredAction="view" />}>
+                  <Route path="/funding" element={<FundingPage />} />
+                  <Route path="/funding/loans/new" element={<LoanFormPage />} />
+                  <Route path="/funding/loans/:id" element={<LoanPage />} />
                 </Route>
                 <Route element={<ProtectedRoute requiredModule="financeReceivables" requiredAction="view" />}>
                   <Route path="/receivables" element={<ReceivablesPage />} />

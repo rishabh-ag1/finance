@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
-import { Banknote, ChartColumn, Percent, ClipboardList, FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings, Tags, Truck, Upload, UserRound, Wand2, type LucideIcon, CalendarRange, WalletCards, ArrowRightLeft, Building2, Package, FileSpreadsheet, HandCoins } from 'lucide-react';
+import { Banknote, ChartColumn, Percent, ClipboardList, FileText, History, House, Landmark, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings, Tags, Truck, Upload, UserRound, Wand2, type LucideIcon, CalendarRange, WalletCards, ArrowRightLeft, Building2, Package, FileSpreadsheet, HandCoins, PiggyBank } from 'lucide-react';
 import { useAuth } from '../context/auth';
 import { cn } from '../lib/utils';
 import { useReviewCount } from '../pages/bank/ledgerApi';
@@ -37,6 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/receivables', label: 'Receivables', icon: HandCoins, module: 'financeReceivables' },
   { to: '/customers', label: 'Customers', icon: Building2, module: 'financeCustomers' },
   { to: '/products', label: 'Products & prices', icon: Package, module: 'financeCustomers' },
+  { to: '/funding', label: 'Funding & loans', icon: PiggyBank, module: 'financeFunding' },
   { to: '/order-to-bank', label: 'Order-to-bank', icon: ArrowRightLeft, module: 'financeOrders', badge: 'discrepancies' },
   { to: '/documents', label: 'Documents', icon: FileText, module: 'financeDocuments' },
   { to: '/categories', label: 'Categories', icon: Tags, module: 'financeSettings' },

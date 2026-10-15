@@ -13,6 +13,7 @@ import { apAgeing, dueList } from './payment.service';
 import { chaseList } from './bill.service';
 import { moneyInTransit, openDiscrepancyCount } from './recon.service';
 import { expectedInvoiceReceipts, outstandingList } from './receivables.service';
+import { covenant, expectedLoanPayments } from './funding.service';
 import { forecastWeeks, weekIndex } from '../lib/forecast';
 import { daysOverdue, msmeAlert } from '../lib/payables';
 
@@ -190,6 +191,15 @@ export async function home(opts: { asOf?: string; accountIds?: string[] } = {}) 
     console.error('Receivables left out of Home:', error);
   }
 
+  // D31: total debt against the Mesa cap (BR-28).
+  let debt: { totalDebt: string; cap: string; headroom: string; breached: boolean } | null = null;
+  try {
+    const c = await covenant();
+    debt = { totalDebt: c.totalDebt, cap: c.cap, headroom: c.headroom, breached: c.breached };
+  } catch (error) {
+    console.error('Debt left out of Home:', error);
+  }
+
   return {
     asOf,
     fy: fy.label,
@@ -207,6 +217,7 @@ export async function home(opts: { asOf?: string; accountIds?: string[] } = {}) 
     founders,
     orderToBank,
     receivables,
+    debt,
     actions: {
       claimsToApprove,
       review,
@@ -360,7 +371,7 @@ async function businessCash(asOf: string) {
   return cash;
 }
 
-type ForecastItem = { week: number; kind: 'bill' | 'advance' | 'tds' | 'claims' | 'regular' | 'receipt'; label: string; date: string | null; amount: Decimal; link: string | null };
+type ForecastItem = { week: number; kind: 'bill' | 'advance' | 'tds' | 'claims' | 'regular' | 'receipt' | 'loan'; label: string; date: string | null; amount: Decimal; link: string | null };
 
 /**
  * D33: opening cash, then each week's expected payments. Dated items fall in their week (anything
@@ -390,6 +401,8 @@ export async function forecast(opts: { asOf?: string } = {}) {
   } catch (error) {
     console.error('Order-to-bank figures left out of the forecast:', error);
   }
+  // Loan instalments not yet paid, and flexible loans' balance on their final date (F142).
+  for (const x of await expectedLoanPayments()) add(x.date, { kind: 'loan', label: x.label, amount: new Decimal(x.amount), link: `/funding/loans/${x.loanId}` });
   // Invoices not tied to a CRM order (those are counted above as money in transit), by due date.
   for (const x of await expectedInvoiceReceipts()) add(x.date, { kind: 'receipt', label: x.label, amount: new Decimal(x.amount), link: `/sales/${x.docId}` });
 
@@ -431,7 +444,6 @@ export async function forecast(opts: { asOf?: string } = {}) {
     firstShortWeek: firstShort ? firstShort.from : null,
     notIncluded: {
       openPurchaseOrders: { count: openPos.length, unbilled: moneyText(poUnbilled) },
-      loans: 'Loan EMIs come with the loans module (Phase 3)',
     },
   };
 }

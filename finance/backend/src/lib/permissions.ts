@@ -18,6 +18,7 @@ export const FINANCE_MODULES = {
     financeCustomers: 'Customers, products and price lists',
     financeSales: 'Proformas, invoices and credit notes',
     financeReceivables: 'Receipts, outstanding and collections',
+    financeFunding: 'Capital, loans and the debt covenant',
     financeDocuments: 'Documents vault',
     financeUsers: 'Users and roles',
     financeAudit: 'Audit log',

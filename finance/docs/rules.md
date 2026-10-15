@@ -226,8 +226,9 @@
 - **Module:** M13
 - **Trigger:** Loan saved, EMI matched, new loan added
 - **Logic:** Loan types: EMI (schedule generated, each EMI split into interest and principal), bullet, or flexible prepayment (no schedule; each repayment recorded; balance and days to final due date shown). Total debt = principal outstanding on all loans + drawn cash credit. Warn if total debt > ₹45,00,000 (Mesa aggregate cap).
-- **Worked example:** Mesa ₹12,00,000 disbursed 4 Jun 2026, flexible: repay any time within 18 months.
-- **Confidence:** High on logic. Interest terms from the Mesa agreement to be entered.
+- **Worked example:** Mesa ₹12,00,000 disbursed 4 Jun 2026, flexible: repay any time within 18 months: repay in full by 4 Dec 2027 (415 days left on 15 Oct 2026); a ₹2,00,000 prepayment leaves ₹10,00,000. With ₹12,00,000 outstanding, adding a ₹34,00,000 loan takes total debt to ₹46,00,000: warning, ₹1,00,000 above the cap. EMI loan ₹10,00,000 at 12% over 12 months: EMI ₹88,849, month 1 interest ₹10,000 and principal ₹78,849; the bank debit of ₹88,849 is split into ₹78,849 Loan Principal Repaid and ₹10,000 Loan Interest.
+- **As built (Step 18):** EMI rounded to the rupee, interest each month at rate / 12 on the balance, the last instalment clears the balance; moratorium months pay interest only; bullet pays interest monthly and the principal last. Flexible loans have no schedule; suggested interest is simple, on the balance, actual days / 365 since the last payment. Cash credit counts at its drawn balance (latest statement balance) unless sanctioned limits are switched on (Q14). The cap is a setting (₹45,00,000). The check warns before a loan is saved and never blocks.
+- **Confidence:** High on logic. Interest terms from the Mesa agreement to be entered (Q38).
 
 ## BR-29 - Related party transactions
 

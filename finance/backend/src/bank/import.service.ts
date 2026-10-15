@@ -15,6 +15,7 @@ import { matchPaymentsForTxns } from '../services/payment.service';
 import { matchReimbursementsForTxns } from '../services/claim.service';
 import { matchOrderCreditsForTxns } from '../services/reconMatch.service';
 import { matchReceiptsForTxns, settleOrderInvoices } from '../services/receivables.service';
+import { matchFundingForTxns } from '../services/funding.service';
 import { listAttachments, upload } from '../services/attachment.service';
 
 /**
@@ -238,6 +239,8 @@ export async function confirmImport(ctx: AuditContext, input: ImportFile) {
         await matchOrderCreditsForTxns(tx, newIds);
         // M10: credits that are recorded customer receipts (BR-38).
         await matchReceiptsForTxns(tx, newIds);
+        // M13: capital, loan money received and loan repayments already recorded (BR-28).
+        await matchFundingForTxns(tx, newIds);
         await autoCategorise(tx, newIds);
       }
       return b;

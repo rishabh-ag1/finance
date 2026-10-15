@@ -8,15 +8,15 @@ import { formatINR } from '../lib/money';
 import { cn } from '../lib/utils';
 import { dateLabel } from './settings/api';
 
-type Item = { kind: 'bill' | 'advance' | 'tds' | 'claims' | 'regular' | 'receipt'; label: string; date: string | null; amount: string; link: string | null };
+type Item = { kind: 'bill' | 'advance' | 'tds' | 'claims' | 'regular' | 'receipt' | 'loan'; label: string; date: string | null; amount: string; link: string | null };
 type Week = { from: string; to: string; opening: string; receipts: string; payments: string; closing: string; items: Item[] };
 type Forecast = {
   asOf: string; openingCash: string; regularWeekly: string; regularBasis: { from: string; to: string; total: string };
   weeks: Week[]; closingCash: string; firstShortWeek: string | null;
-  notIncluded: { openPurchaseOrders: { count: number; unbilled: string }; loans: string };
+  notIncluded: { openPurchaseOrders: { count: number; unbilled: string } };
 };
 
-const KIND_LABEL: Record<Item['kind'], string> = { bill: 'Bill', advance: 'Advance', tds: 'TDS', claims: 'Founder', regular: 'Regular', receipt: 'In' };
+const KIND_LABEL: Record<Item['kind'], string> = { bill: 'Bill', advance: 'Advance', tds: 'TDS', claims: 'Founder', regular: 'Regular', receipt: 'In', loan: 'Loan' };
 const short = (v: string) => formatINR(v, { decimals: false });
 const day = (d: string) => dateLabel(d).replace(/ \d{4}$/, '');
 
@@ -85,7 +85,7 @@ export function ForecastPage() {
 
       <Card className="p-3 sm:p-4 text-xs text-gray-600 space-y-1">
         <p><span className="font-medium text-gray-800">How it is worked out.</span> Bills and advances fall in the week they are due; TDS by its deposit date; what is owed to founders in this week. Money in: Razorpay payments, COD delivered and settlements not yet in the bank, on the day each is expected in the bank (Order-to-bank). Regular spending is spending with no bill (salaries, rent, subscriptions): the weekly average of {dateLabel(f.regularBasis.from)} to {dateLabel(f.regularBasis.to)} ({short(f.regularBasis.total)} over 13 weeks).</p>
-        <p><span className="font-medium text-gray-800">Not in the weeks yet.</span> {f.notIncluded.loans}. {f.notIncluded.openPurchaseOrders.count > 0 ? `${f.notIncluded.openPurchaseOrders.count} open purchase order(s) with ${short(f.notIncluded.openPurchaseOrders.unbilled)} not yet billed or paid in advance have no dates, so they are left out.` : 'No open purchase orders.'}</p>
+        <p><span className="font-medium text-gray-800">Not in the weeks yet.</span> {f.notIncluded.openPurchaseOrders.count > 0 ? `${f.notIncluded.openPurchaseOrders.count} open purchase order(s) with ${short(f.notIncluded.openPurchaseOrders.unbilled)} not yet billed or paid in advance have no dates, so they are left out.` : 'No open purchase orders.'}</p>
       </Card>
     </div>
   );

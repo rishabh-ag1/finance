@@ -893,3 +893,79 @@ end $$;
 drop trigger if exists receipt_allocation_fixed on finance."ReceiptAllocation";
 create trigger receipt_allocation_fixed before update on finance."ReceiptAllocation"
   for each row execute function finance.receipt_allocation_fixed();
+
+-- ---------------------------------------------------------------------------
+-- Step 18: funding and loans (M13)
+-- ---------------------------------------------------------------------------
+alter table finance."CapitalReceipt" drop constraint if exists capital_receipt_shape;
+alter table finance."CapitalReceipt" add constraint capital_receipt_shape check (
+  "amount" > 0 and "type" in ('paid_up_capital', 'share_application_money') and "status" in ('recorded', 'cancelled')
+  and ("status" <> 'cancelled' or length(trim(coalesce("statusReason", ''))) > 0)
+  and ("sharesAllotted" is null or "sharesAllotted" > 0)
+  and ("allotmentDate" is null or "allotmentDate" >= "receiptDate")
+  and length(trim("holderName")) > 0
+);
+
+alter table finance."Loan" drop constraint if exists loan_shape;
+alter table finance."Loan" add constraint loan_shape check (
+  "sanctionAmount" > 0 and "disbursedAmount" > 0 and "disbursedAmount" <= "sanctionAmount"
+  and "repaymentType" in ('emi', 'bullet', 'flexible') and "tenureMonths" between 1 and 360 and "moratoriumMonths" between 0 and 60
+  and ("interestRate" is null or ("interestRate" >= 0 and "interestRate" <= 60))
+  and "finalDueDate" > "disbursedDate"
+  and "status" in ('active', 'closed', 'cancelled') and ("status" <> 'cancelled' or length(trim(coalesce("statusReason", ''))) > 0)
+);
+
+alter table finance."LoanRepayment" drop constraint if exists loan_repayment_shape;
+alter table finance."LoanRepayment" add constraint loan_repayment_shape check (
+  "principal" >= 0 and "interest" >= 0 and "principal" + "interest" > 0 and "status" in ('recorded', 'cancelled')
+  and ("status" <> 'cancelled' or length(trim(coalesce("statusReason", ''))) > 0)
+);
+
+-- Money recorded for funding never changes; a wrong entry is cancelled with a reason.
+create or replace function finance.funding_money_fixed() returns trigger
+language plpgsql as $$
+declare
+  o jsonb := to_jsonb(old);
+  n jsonb := to_jsonb(new);
+  keys text[] := case tg_table_name
+    when 'CapitalReceipt' then array['amount', 'receiptDate', 'type', 'holderName']
+    when 'LoanRepayment' then array['principal', 'interest', 'paidDate', 'loanId']
+    else array['disbursedAmount', 'disbursedDate'] end;
+  k text;
+begin
+  if o->>'status' = 'cancelled' then
+    raise exception 'finance: a cancelled entry cannot be changed' using errcode = 'P0018';
+  end if;
+  foreach k in array keys loop
+    if (o->k) is distinct from (n->k) then
+      raise exception 'finance: % cannot be changed once recorded; cancel it and record it again', k using errcode = 'P0018';
+    end if;
+  end loop;
+  return new;
+end $$;
+drop trigger if exists capital_receipt_fixed on finance."CapitalReceipt";
+create trigger capital_receipt_fixed before update on finance."CapitalReceipt" for each row execute function finance.funding_money_fixed();
+drop trigger if exists loan_repayment_fixed on finance."LoanRepayment";
+create trigger loan_repayment_fixed before update on finance."LoanRepayment" for each row execute function finance.funding_money_fixed();
+drop trigger if exists loan_fixed on finance."Loan";
+create trigger loan_fixed before update on finance."Loan" for each row execute function finance.funding_money_fixed();
+
+-- BR-36: no funding entry dated in a locked month.
+create or replace function finance.funding_month_open() returns trigger
+language plpgsql as $$
+declare
+  col text := case tg_table_name when 'CapitalReceipt' then 'receiptDate' when 'LoanRepayment' then 'paidDate' else 'disbursedDate' end;
+  d date := (to_jsonb(new)->>col)::date;
+  o date := case when tg_op = 'INSERT' then null else (to_jsonb(old)->>col)::date end;
+begin
+  if (tg_op = 'INSERT' or d is distinct from o) and finance.is_month_locked(new."entityId", d) then
+    raise exception 'finance: % is in a locked month; unlock it in Settings > Period lock first', d using errcode = 'P0007';
+  end if;
+  return new;
+end $$;
+drop trigger if exists capital_receipt_month_open on finance."CapitalReceipt";
+create trigger capital_receipt_month_open before insert or update on finance."CapitalReceipt" for each row execute function finance.funding_month_open();
+drop trigger if exists loan_repayment_month_open on finance."LoanRepayment";
+create trigger loan_repayment_month_open before insert or update on finance."LoanRepayment" for each row execute function finance.funding_month_open();
+drop trigger if exists loan_month_open on finance."Loan";
+create trigger loan_month_open before insert or update on finance."Loan" for each row execute function finance.funding_month_open();
