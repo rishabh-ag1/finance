@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowRight } from 'lucide-react';
 import api from '../api';
+import { SpendByCategory } from './SpendByCategory';
 import { Card, PageHeader } from '../components/ui/kit';
 import { useAuth } from '../context/auth';
 import { formatDateTime } from '../lib/format';
@@ -102,6 +103,8 @@ export function HomePage() {
           {h.orderToBank && hasPermission('financeOrders', 'view') && <Kpi label="Money in transit" value={short(h.orderToBank.inTransit ?? '0')} hint="Paid by customers, not yet in the bank" tone={h.orderToBank.overdue ? 'bad' : undefined} to="/order-to-bank" />}
         </div>
       )}
+
+      {hasPermission('financeHome', 'view') && <SpendByCategory />}
 
       {actions.length > 0 && (
         <Card className="p-3 sm:p-4">

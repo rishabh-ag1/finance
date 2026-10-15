@@ -527,6 +527,7 @@ Every metric with its exact definition and formula.
 | D36 | Order-to-Bank | Order-to-bank funnel | Where each month's order value is | Order value, then collected, then settled/remitted, then in bank, then refunded/RTO, by order month Built (Step 19): Order-to-bank > Funnel, by order month for orders placed in a chosen period. | Month, channel | Orders | P0 |
 | D37 | Order-to-Bank | Days to bank | Speed of collection | Average and 90th percentile of (bank date - order date) by route Built (Step 19): average and 90th percentile (nearest rank) by route, beside the funnel. | Month, route | Orders | P1 |
 | D38 | Home | Cash credit headroom and liquidity | Undrawn credit available | min(sanctioned, drawing power) - drawn; liquidity = cash + headroom (BR-50) | - | CC account | P1 |
+| D39 | Home | Spend by category | Which verticals take the most and the least money, to decide where to raise or cut budgets | Outflows with nature Operating Expense, COGS or Interest (capex apart, as in burn) by category for this month so far, the last 3 complete months or the FY so far; largest first with share of spend; the 10 largest shown, the rest folded into Other; change against the same-length period before (not for the FY). Cash or accrual view (BR-35). Built (16 Oct 2026): horizontal bar chart in one colour, value and share at each bar, hover for previous period, transactions and top sub-categories, table view; a bar opens Category analytics with that category open | Period, cash / accrual | Category analytics (D11), then the ledger | P0 |
 
 ## Integrations
 

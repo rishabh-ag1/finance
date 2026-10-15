@@ -14,6 +14,10 @@ router.get('/categories', view, handler((req) => dashboard.categoryPivot({
     kind: ['expense', 'income', 'capex'].includes(String(req.query.kind)) ? req.query.kind as 'expense' : 'expense',
     view: req.query.view === 'accrual' ? 'accrual' : 'cash',
 })));
+router.get('/spend-by-category', view, handler((req) => dashboard.spendByCategory({
+    period: ['month', '3m', 'fy'].includes(String(req.query.period)) ? req.query.period as 'month' : '3m',
+    view: req.query.view === 'accrual' ? 'accrual' : 'cash',
+})));
 router.get('/payables', requirePermission('financePayments', 'view'), handler((req) => dashboard.payables({ fy: typeof req.query.fy === 'string' ? req.query.fy : undefined })));
 router.get('/forecast', view, handler((req) => dashboard.forecast({ asOf: dateParam(req.query.asOf) })));
 

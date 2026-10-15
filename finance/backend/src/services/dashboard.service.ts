@@ -447,3 +447,67 @@ export async function forecast(opts: { asOf?: string } = {}) {
     },
   };
 }
+
+// ---------- D39 spend by category on Home ----------
+
+export type SpendPeriod = 'month' | '3m' | 'fy';
+const lastDay = (monthFirst: string) => { const [y, m] = monthFirst.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
+
+/** The period a Home chart covers, and the same-length period before it (none for the FY). */
+function spendWindow(period: SpendPeriod, today: string) {
+  if (period === 'month') {
+    const from = monthStart(today);
+    const prev = lastCompleteMonths(today, 1)[0];
+    return { from, to: today, label: 'This month so far', prev: { from: prev, to: lastDay(prev), label: 'last month' } };
+  }
+  if (period === '3m') {
+    const m = lastCompleteMonths(today, 6);
+    return { from: m[3], to: lastDay(m[5]), label: 'Last 3 complete months', prev: { from: m[0], to: lastDay(m[2]), label: 'the 3 months before' } };
+  }
+  const fy = fyRange(today);
+  return { from: fy.from, to: today, label: `FY ${fy.label} so far`, prev: null };
+}
+
+/**
+ * D39: where the money goes. Operating expense, COGS and interest out by category for a period
+ * (capex apart, as in burn), largest first, with each category's share and the change against the
+ * period before, to see which verticals to grow or cut.
+ */
+export async function spendByCategory(opts: { period?: SpendPeriod; view?: FlowView } = {}) {
+  const today = todayIST();
+  const period = opts.period ?? '3m';
+  const view = opts.view ?? 'cash';
+  const w = spendWindow(period, today);
+  const spend = (rows: FlowRow[]) => rows.filter((f) => PIVOT_NATURES.expense.includes(f.nature) && f.direction === 'out');
+  const now = spend(await loadFlows(w.from, w.to, undefined, view));
+  const before = w.prev ? spend(await loadFlows(w.prev.from, w.prev.to, undefined, view)) : [];
+  const cats = new Map((await prisma.category.findMany()).map((c) => [c.id, c.name]));
+  const subs = new Map((await prisma.subCategory.findMany()).map((s) => [s.id, s.name]));
+  const by = new Map<string, { amount: Decimal; count: number; subs: Map<string, Decimal> }>();
+  for (const f of now) {
+    const k = f.categoryId ?? 'none';
+    const r = by.get(k) ?? { amount: new Decimal(0), count: 0, subs: new Map() };
+    r.amount = r.amount.plus(f.amount);
+    r.count += 1;
+    const sk = f.subCategoryId ?? 'none';
+    r.subs.set(sk, (r.subs.get(sk) ?? new Decimal(0)).plus(f.amount));
+    by.set(k, r);
+  }
+  const prevBy = new Map<string, Decimal>();
+  for (const f of before) prevBy.set(f.categoryId ?? 'none', (prevBy.get(f.categoryId ?? 'none') ?? new Decimal(0)).plus(f.amount));
+  const total = [...by.values()].reduce((s, r) => s.plus(r.amount), new Decimal(0));
+  return {
+    period, view, from: w.from, to: w.to, label: w.label, comparedWith: w.prev?.label ?? null,
+    total: moneyText(total),
+    rows: [...by.entries()].sort(([, a], [, b]) => b.amount.comparedTo(a.amount)).map(([id, r]) => {
+      const prev = prevBy.get(id) ?? new Decimal(0);
+      return {
+        categoryId: id === 'none' ? null : id, name: id === 'none' ? 'Not categorised' : cats.get(id) ?? 'Unknown', amount: moneyText(r.amount),
+        sharePercent: total.isZero() ? '0' : r.amount.dividedBy(total).times(100).toFixed(1), transactions: r.count,
+        previous: w.prev ? moneyText(prev) : null,
+        changePercent: w.prev && !prev.isZero() ? r.amount.minus(prev).dividedBy(prev).times(100).toFixed(0) : null,
+        topSubCategories: [...r.subs.entries()].sort(([, a], [, b]) => b.comparedTo(a)).slice(0, 3).map(([sid, amt]) => ({ name: sid === 'none' ? '(no sub-category)' : subs.get(sid) ?? 'Unknown', amount: moneyText(amt) })),
+      };
+    }),
+  };
+}

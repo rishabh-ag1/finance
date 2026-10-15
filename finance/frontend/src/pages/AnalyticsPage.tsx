@@ -45,7 +45,8 @@ export function AnalyticsPage() {
   const view: View = params.get('view') === 'accrual' ? 'accrual' : 'cash';
   // In the accrual view a cell is bills and claims too, so it cannot open as bank rows.
   const drill = view === 'cash';
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  // Opened from Home's spend chart: that category starts expanded.
+  const [open, setOpen] = useState<Set<string>>(() => new Set(params.get('category') ? [params.get('category')!] : []));
   const set = (k: string, v: string) => { const n = new URLSearchParams(params); if (v) n.set(k, v); else n.delete(k); setParams(n, { replace: true }); };
 
   const { data: p, isLoading } = useQuery({
